@@ -96,10 +96,15 @@ class NeakasaActivityCard extends HTMLElement{
    this.records=events.filter(event=>event&&typeof event.timestamp==='string'&&Number.isFinite(Date.parse(event.timestamp))&&Date.parse(event.timestamp)>=since).map(event=>{
      const duration=Math.max(0,Math.round(Number(event.duration_seconds)||0));
      let message;
-     if(event.type==='cat_visit')message=String(event.cat||'Unknown')+' visited the litter box, stayed '+duration+'s.';
-     else if(event.type==='cleaning')message='Smart cleanup completed, took '+duration+'s.';
+     if(event.type==='cat_visit'){
+       const stay=duration>=60?Math.floor(duration/60)+'min'+(duration%60?duration%60+'s':''):duration+'s';
+       const weight=Number(event.weight);
+       const weighing=Number.isFinite(weight)&&weight>0?', weighing '+weight+(event.weight_unit||'kg'):'';
+       message=String(event.cat||'Unknown')+' entered, stayed for '+stay+weighing;
+     }else if(event.type==='cleaning')message='Smart Cleanup Completed';
+     else if(event.type==='leveling')message='Manual leveling completed';
      else message='Litter box activity';
-     return {message,time:event.timestamp,catName:event.type==='cat_visit'?String(event.cat||'Unknown'):null};
+     return {message,time:event.completed_at||event.timestamp,catName:event.type==='cat_visit'?String(event.cat||'Unknown'):null};
    }).sort((a,b)=>Date.parse(b.time)-Date.parse(a.time)).slice(0,Math.max(1,Number(this.config.limit)||10));
    this.draw();
  }
