@@ -72,80 +72,57 @@ class NeakasaM1Card extends HTMLElement{
 }
 class NeakasaActivityCard extends HTMLElement{
  setConfig(config){
-   if(!config?.entity&&!config?.activity_entity)throw Error('entity or activity_entity required');
-   this.config={title:'',limit:10,days:7,cats:[],...config};this.records=null;this._last=0;this.draw();
+   this.config={title:'',limit:10,days:7,cats:[],...config};this.records=null;this._nativeSignature=null;this.draw();
  }
  set hass(h){
    this._hass=h;
-   const native=this.nativeSensor();
-   if(native){
-     const signature=JSON.stringify(native.attributes.events);
-     if(signature!==this._nativeSignature){this._nativeSignature=signature;this.loadNative(native);}
-   }else if(!this.records||Date.now()-this._last>=60000)this.load();
+   const sensor=this.nativeSensor();
+   const signature=sensor?JSON.stringify(sensor.attributes.events):'unavailable';
+   if(signature!==this._nativeSignature){this._nativeSignature=signature;this.updateRecords(sensor);}
  }
- connectedCallback(){if(!this._timer)this._timer=setInterval(()=>this.load(),60000);}
- disconnectedCallback(){clearInterval(this._timer);this._timer=null;}
+ connectedCallback(){this.updateRecords(this.nativeSensor());}
  nativeSensor(){
-   if(!this._hass)return null;
-   const states=this._hass.states||{};
-   const configured=this.config.activity_entity||this.config.entity;
-   const explicit=states[configured];
-   if(Array.isArray(explicit?.attributes?.events))return explicit;
-   if(this.config.activity_entity)return null;
+   const states=this._hass?.states||{};
+   const entity=this.config?.activity_entity||this.config?.entity;
+   if(entity)return Array.isArray(states[entity]?.attributes?.events)?states[entity]:null;
    return Object.entries(states).find(([id,state])=>id.startsWith('sensor.')&&id.endsWith('_recent_activity')&&Array.isArray(state.attributes?.events))?.[1]||null;
  }
- loadNative(sensor){
+ updateRecords(sensor){
+   if(!this.config)return;
+   if(!sensor){this.records=null;this.draw();return;}
    const since=Date.now()-Math.max(1,Number(this.config.days)||7)*86400000;
-   const events=Array.isArray(sensor.attributes?.events)?sensor.attributes.events:[];
+   const events=sensor.attributes.events;
    this.records=events.filter(event=>event&&typeof event.timestamp==='string'&&Number.isFinite(Date.parse(event.timestamp))&&Date.parse(event.timestamp)>=since).map(event=>{
      const duration=Math.max(0,Math.round(Number(event.duration_seconds)||0));
      let message;
-     if(event.type==='cat_visit'){
-       const cat=String(event.cat||'Unknown');
-       message=cat+' visited the litter box, stayed '+duration+'s.';
-     }else if(event.type==='cleaning')message='Smart cleanup completed, took '+duration+'s.';
+     if(event.type==='cat_visit')message=String(event.cat||'Unknown')+' visited the litter box, stayed '+duration+'s.';
+     else if(event.type==='cleaning')message='Smart cleanup completed, took '+duration+'s.';
      else message='Litter box activity';
      return {message,time:event.timestamp,catName:event.type==='cat_visit'?String(event.cat||'Unknown'):null};
    }).sort((a,b)=>Date.parse(b.time)-Date.parse(a.time)).slice(0,Math.max(1,Number(this.config.limit)||10));
-   this.error=null;this._last=Date.now();this.draw();
- }
- async load(){
-   if(!this._hass||!this.config||this._loading)return;
-   const native=this.nativeSensor();
-   if(native){this.loadNative(native);return;}
-   if(this.config.activity_entity){this.records=[];this.error='Native activity sensor not available';this.draw();return;}
-   this._loading=true;
-   const end=new Date(),start=new Date(end.getTime()-Math.max(1,Number(this.config.days)||7)*86400000);
-   const q=new URLSearchParams({filter_entity_id:this.config.entity,end_time:end.toISOString(),significant_changes_only:'0',minimal_response:'0',no_attributes:'1'});
-   try{
-     const result=await this._hass.callApi('GET',`history/period/${encodeURIComponent(start.toISOString())}?${q}`);
-     this.records=(result[0]||[]).filter(item=>valid(item.state)).map(item=>({message:item.state,time:item.last_changed||item.last_updated})).filter(item=>item.time).sort((a,b)=>Date.parse(b.time)-Date.parse(a.time)).slice(0,Math.max(1,Number(this.config.limit)||10));
-     this.error=null;this._last=Date.now();
-   }catch(error){this.error=error.message||String(error);}
-   finally{this._loading=false;this.draw();}
+   this.draw();
  }
  draw(){
    if(!this.config)return;
    const card=shell(this);if(this.config.title)card.append(make('div','title',this.config.title));
-   if(!this.records){card.append(make('div','subtitle',this.error||'Loading activity…'));return;}
+   if(!this.records){card.append(make('div','subtitle','Native Neakasa activity sensor unavailable'));return;}
    if(!this.records.length)card.append(make('div','subtitle','No recent activity'));
    let day='';
    for(const record of this.records){
      const time=new Date(record.time),current=time.toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'});
      if(current!==day){card.append(make('div','day',current));day=current;}
-     const message=record.message.replace(/\s*\(\d+\)\s*$/,'').trim();
+     const message=record.message.trim();
      const cats=Array.isArray(this.config.cats)?this.config.cats:[];
      const cat=cats.find(c=>typeof c?.name==='string'&&c.name.length&&(record.catName===c.name||message.toLowerCase().includes(c.name.toLowerCase())));
      const entry=make('div','entry'),avatar=make('div','avatar');
      if(cat?.image)photo(avatar,cat.image,'🐱');
-     else{const icon=make('ha-icon');icon.setAttribute('icon',cat?'mdi:cat':/clean/i.test(message)?'mdi:broom':/level/i.test(message)?'mdi:spirit-level':'mdi:information-outline');avatar.append(icon);}
+     else{const icon=make('ha-icon');icon.setAttribute('icon',cat?'mdi:cat':/clean/i.test(message)?'mdi:broom':'mdi:information-outline');avatar.append(icon);}
      const content=make('div');content.append(make('div','time',time.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})));
      const description=make('div','text'),i=cat?message.toLowerCase().indexOf(cat.name.toLowerCase()):-1;
      if(i>=0)description.append(document.createTextNode(message.slice(0,i)),make('strong',null,message.slice(i,i+cat.name.length)),document.createTextNode(message.slice(i+cat.name.length)));
      else description.textContent=message;
      content.append(description);entry.append(avatar,content);card.append(entry);
    }
-   if(this.error)card.append(make('div','subtitle',`Refresh failed: ${this.error}`));
  }
  getCardSize(){return 5;}
  static getStubConfig(){return {entity:'sensor.cats_room_neakasa_m1_recent_activity'};}
@@ -194,20 +171,17 @@ class NeakasaCatsCard extends HTMLElement {
  nativeStaySensor(cat){
    const states=this._hass?.states||{};
    const configured=cat.stay_native||cat.stay;
-   const explicit=states[configured];
-   if(explicit?.attributes?.unit_of_measurement==='s')return explicit;
+   if(configured)return states[configured]?.attributes?.unit_of_measurement==='s'?states[configured]:null;
    const slug=cat.name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'');
    return Object.entries(states).find(([id,state])=>id.startsWith('sensor.')&&id.endsWith('_'+slug+'_stay_today')&&state.attributes?.unit_of_measurement==='s')?.[1]||null;
  }
  formatStay(cat){
    const native=this.nativeStaySensor(cat);
-   if(native&&valid(native.state)){
-     const seconds=Math.max(0,Math.round(Number(native.state)));
-     if(Number.isFinite(seconds))return Math.floor(seconds/60)+'m '+String(seconds%60).padStart(2,'0')+'s';
-   }
-   return this.state(cat.stay)?.state??'—';
+   if(!native||!valid(native.state))return '—';
+   const seconds=Math.round(Number(native.state));
+   if(!Number.isFinite(seconds)||seconds<0)return '—';
+   return Math.floor(seconds/60)+'m '+String(seconds%60).padStart(2,'0')+'s';
  }
-
  more(entity){if(entity)this.dispatchEvent(new CustomEvent('hass-more-info',{bubbles:true,composed:true,detail:{entityId:entity}}));}
  selectCat(cat){
    this._selectedCat=this._selectedCat===cat.name?null:cat.name;
