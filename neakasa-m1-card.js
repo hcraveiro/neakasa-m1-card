@@ -82,8 +82,8 @@ class NeakasaActivityCard extends HTMLElement{
 }
 
 const CATS_STYLE = `
-.cat-choices{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-bottom:10px}
-.cat-choice{min-width:0;display:grid;grid-template-columns:minmax(44px,36%) 1fr;align-items:center;min-height:78px;border:1px solid var(--divider-color);border-radius:20px;background:var(--card-background-color);color:var(--primary-text-color);padding:6px;cursor:pointer;font:inherit}
+.cat-choices{display:flex;gap:8px;margin-bottom:10px;overflow-x:auto;scroll-snap-type:x mandatory;overscroll-behavior-x:contain;scrollbar-width:none;-webkit-overflow-scrolling:touch;touch-action:pan-x pan-y}.cat-choices::-webkit-scrollbar{display:none}
+.cat-choice{flex:0 0 calc((100% - 8px)/2);box-sizing:border-box;scroll-snap-align:start;min-width:0;display:grid;grid-template-columns:minmax(44px,36%) 1fr;align-items:center;min-height:78px;border:1px solid var(--divider-color);border-radius:20px;background:var(--card-background-color);color:var(--primary-text-color);padding:6px;cursor:pointer;font:inherit}
 .cat-choice[aria-pressed="true"]{border:2px solid var(--primary-color);background:var(--secondary-background-color)}
 .cat-ident{display:flex;align-items:center;flex-direction:column;gap:5px;border-right:1px solid var(--divider-color);padding-right:3px;font-weight:600;font-size:13px}
 .cat-ident img{width:36px;height:36px;object-fit:cover;border-radius:50%}
@@ -95,7 +95,7 @@ const CATS_STYLE = `
 .cat-last{padding:12px 14px;border:1px solid var(--divider-color);display:flex;align-items:center;gap:12px;margin-bottom:12px}
 .cat-last ha-icon{color:var(--primary-color)}
 .cat-last span{display:block;font-size:13px;color:var(--secondary-text-color);margin-top:3px}
-.cat-chart{border:1px solid var(--divider-color);border-radius:15px;padding:12px 8px 6px;min-height:260px}
+.cat-chart{border:1px solid var(--divider-color);border-radius:15px;padding:12px 8px 6px;min-height:260px;touch-action:pan-y;user-select:none;-webkit-user-select:none}
 .cat-chart-title{font-size:15px;color:var(--secondary-text-color);padding:2px 8px 10px}
 .cat-chart svg{display:block;width:100%;height:auto;max-height:295px;overflow:visible}
 .cat-chart .gridline{stroke:var(--divider-color);stroke-dasharray:3 4}
@@ -142,7 +142,7 @@ class NeakasaCatsCard extends HTMLElement {
    if(name!==this._renderedCat){this._renderedCat=name;this.renderPanel();}
    else{
      const last=this.shadowRoot?.querySelector('[data-last-visit]');
-     if(last&&selected)last.textContent=this.state(selected.last_visit)?.state??'—';
+     if(last&&selected)last.textContent=this.formatLastVisit(this.state(selected.last_visit)?.state);
    }
  }
  render(){
@@ -167,6 +167,18 @@ class NeakasaCatsCard extends HTMLElement {
    const panel=make('div','cat-panel');panel.dataset.catPanel='';card.append(panel);
    this._renderedCat=undefined;
  }
+ formatLastVisit(raw){
+   if(!valid(raw))return '—';
+   const timestamp=Date.parse(raw);
+   if(!Number.isFinite(timestamp))return raw;
+   const delta=Math.max(0,Math.floor((Date.now()-timestamp)/60000));
+   if(delta<1)return 'Just now';
+   if(delta<60)return `${delta} minute${delta===1?'':'s'} ago`;
+   const hours=Math.floor(delta/60);
+   if(hours<24)return `${hours} hour${hours===1?'':'s'} ago`;
+   const days=Math.floor(hours/24);
+   return `${days} day${days===1?'':'s'} ago`;
+ }
  renderPanel(){
    const panel=this.shadowRoot?.querySelector('[data-cat-panel]');
    if(!panel)return;
@@ -177,9 +189,25 @@ class NeakasaCatsCard extends HTMLElement {
    const heading=make('div','cat-panel-heading');const icon=make('ha-icon');icon.setAttribute('icon','mdi:cat');heading.append(icon,make('span',null,cat.name));panel.append(heading);
    const last=make('div','cat-last');last.style.cursor='pointer';last.onclick=()=>this.more(cat.last_visit);
    const clock=make('ha-icon');clock.setAttribute('icon','mdi:clock-outline');
-   const text=make('div',null,'Last visit');const value=make('span',null,this.state(cat.last_visit)?.state??'—');value.dataset.lastVisit='';value.setAttribute('data-last-visit','');
+   const text=make('div',null,'Last visit');const value=make('span',null,this.formatLastVisit(this.state(cat.last_visit)?.state));value.dataset.lastVisit='';value.setAttribute('data-last-visit','');
    text.append(value);last.append(clock,text);panel.append(last);
    const chart=make('div','cat-chart');chart.dataset.catChart='';panel.append(chart);
+   let touchStart=null;
+   chart.addEventListener('touchstart',event=>{
+     if(event.touches.length!==1)return;
+     touchStart={x:event.touches[0].clientX,y:event.touches[0].clientY};
+   },{passive:true});
+   chart.addEventListener('touchend',event=>{
+     if(!touchStart||!event.changedTouches.length)return;
+     const dx=event.changedTouches[0].clientX-touchStart.x;
+     const dy=event.changedTouches[0].clientY-touchStart.y;
+     touchStart=null;
+     if(Math.abs(dx)>45&&Math.abs(dx)>Math.abs(dy)*1.25){
+       const next=dx<0?'visits':'weight';
+       if(next!==this._mode){this._mode=next;this.drawChart();}
+     }
+   },{passive:true});
+   chart.addEventListener('touchcancel',()=>{touchStart=null;});
    const switches=make('div','cat-switch');
    for(const mode of ['weight','visits']){const dot=make('button');dot.type='button';dot.setAttribute('aria-label',mode==='weight'?'Weight chart':'Daily visits chart');dot.setAttribute('aria-pressed',String(this._mode===mode));dot.onclick=()=>{this._mode=mode;this.drawChart();};switches.append(dot);}
    panel.append(switches);this.drawChart();
