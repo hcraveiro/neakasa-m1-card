@@ -101,8 +101,8 @@ class NeakasaActivityCard extends HTMLElement{
        const weight=Number(event.weight);
        const weighing=Number.isFinite(weight)&&weight>0?', weighing '+weight+(event.weight_unit||'kg'):'';
        message=String(event.cat||'Unknown')+' entered, stayed for '+stay+weighing;
-     }else if(event.type==='cleaning')message='Smart Cleanup Completed';
-     else if(event.type==='leveling')message='Leveling completed';
+     }else if(event.type==='cleaning')message='Smart Cleanup completed'+(duration>0?' in '+duration+' s':'');
+     else if(event.type==='leveling')message='Manual leveling completed'+(duration>0?' in '+duration+' s':'');
      else message='Litter box activity';
      return {message,time:event.completed_at||event.timestamp,catName:event.type==='cat_visit'?String(event.cat||'Unknown'):null};
    }).sort((a,b)=>Date.parse(b.time)-Date.parse(a.time)).slice(0,Math.max(1,Number(this.config.limit)||10));
