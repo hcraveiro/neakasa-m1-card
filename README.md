@@ -1,15 +1,16 @@
 # Neakasa M1 Card
 
-Two Lovelace cards delivered by a **single JavaScript resource**.
+One JavaScript resource registers **two independent Home Assistant Lovelace cards**.
 
-> **Development preview:** Original Neakasa image and six original icons still need to be embedded. This is not a production release. Test in a separate view before replacing existing cards.
+The device photograph and all six original Neakasa icons are embedded directly into `neakasa-m1-card.js`. No image files or icon paths are required for the device card.
+
+> Development preview: test in a separate dashboard before replacing existing cards. The JavaScript passes a syntax check, but device actions and responsive layout have not yet been validated in the Home Assistant frontend.
 
 ## Device card
 
 ```yaml
 type: custom:neakasa-m1-card
 name: Cat's Toilet
-image: /local/neakasa/neakasa.webp
 entities:
   status: sensor.neakasa_m1_status
   litter: sensor.neakasa_m1_sand_level
@@ -18,22 +19,13 @@ entities:
   clean: button.neakasa_m1_clean_now
   level: button.neakasa_m1_level_now
   calibrate: number.neakasa_m1_sand_calibration
-icons:
-  litter: /local/neakasa/sand.png
-  waste: /local/neakasa/waste.png
-  visits: /local/neakasa/visits.png
-  clean: /local/neakasa/clean.png
-  level: /local/neakasa/level.png
-  calibrate: /local/neakasa/calibrate.png
 calibration:
   options: [50, 60, 70, 80, 90, 100]
   default: 90
 confirm_actions: true
 ```
 
-The image and icon paths above are temporary for the development preview. The final release is intended to embed all Neakasa artwork into the JavaScript, without requiring any icon configuration.
-
-Indicators open Home Assistant More info. Clean and Level require confirmation by default. Calibrate displays a selector and calls `number.set_value`.
+The status and indicators open More info. Clean and Level have confirmation by default. Calibrate opens an in-card dialog to select the percentage and calls `number.set_value`.
 
 ## Recent Activity card
 
@@ -51,18 +43,20 @@ cats:
     image: /local/neakasa/penny.jpg
 ```
 
-The title is optional. Cat names and avatars are configurable; if an avatar is missing, an icon is used. The card reads Recorder history, orders events newest first, highlights the cat name, groups events by day and removes final event occurrence counters such as `(2)` from the displayed text. The history itself is unchanged.
+The `title` is optional and hidden by default. Cat names and avatar paths are user-configurable; missing avatars fall back to an icon. The timeline queries Recorder history, groups entries by day, emphasizes only the matched cat name, and strips final occurrence markers such as `(2)` from the UI without changing the recorded event.
 
-## Manual development installation
+## Installation for testing
 
-1. Copy `neakasa-m1-card.js` to `/config/www/`.
-2. In Settings → Dashboards → Resources, add `/local/neakasa-m1-card.js?v=0.1.0-dev` as a JavaScript module.
-3. Add either card to a **test view**.
-4. Remove the previous `neakasa-activity-card.js` resource when migrating, because the old and new resources define the same custom element.
+1. Download `neakasa-m1-card.js` from this branch, or install the repository as a custom **Dashboard** repository in HACS after a suitable test release.
+2. For a manual installation, save the file to `/config/www/neakasa-m1-card.js`.
+3. In **Settings → Dashboards → Resources**, register `/local/neakasa-m1-card.js?v=0.1.0-dev2` as a **JavaScript module**.
+4. Add both cards to a **test view** using the YAML examples above.
+5. When replacing the old activity card, **remove the old `neakasa-activity-card.js` resource**, because both scripts register the same custom element.
+6. Keep the original cards in place until you verify the new cards.
 
 ## HACS
 
-The repository includes `hacs.json` for a dashboard plugin installation. Do **not** create a public release until the original artwork is embedded, code is tested on desktop and mobile, and resource installation is verified.
+`hacs.json` describes the root-level dashboard file. The repository is intended to be released as a HACS dashboard card after frontend testing.
 
 ## License
 
