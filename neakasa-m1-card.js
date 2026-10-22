@@ -171,7 +171,7 @@ class NeakasaCatsCard extends HTMLElement {
  nativeStaySensor(cat){
    const states=this._hass?.states||{};
    const configured=cat.stay_native||cat.stay;
-   if(configured)return states[configured]?.attributes?.unit_of_measurement==='s'?states[configured]:null;
+   if(configured&&states[configured]?.attributes?.unit_of_measurement==='s')return states[configured];
    const slug=cat.name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'');
    return Object.entries(states).find(([id,state])=>id.startsWith('sensor.')&&id.endsWith('_'+slug+'_stay_today')&&state.attributes?.unit_of_measurement==='s')?.[1]||null;
  }
