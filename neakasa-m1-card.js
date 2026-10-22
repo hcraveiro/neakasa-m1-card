@@ -102,7 +102,7 @@ class NeakasaActivityCard extends HTMLElement{
        const weighing=Number.isFinite(weight)&&weight>0?', weighing '+weight+(event.weight_unit||'kg'):'';
        message=String(event.cat||'Unknown')+' entered, stayed for '+stay+weighing;
      }else if(event.type==='cleaning')message='Smart Cleanup Completed';
-     else if(event.type==='leveling')message='Manual leveling completed';
+     else if(event.type==='leveling')message='Leveling completed';
      else message='Litter box activity';
      return {message,time:event.completed_at||event.timestamp,catName:event.type==='cat_visit'?String(event.cat||'Unknown'):null};
    }).sort((a,b)=>Date.parse(b.time)-Date.parse(a.time)).slice(0,Math.max(1,Number(this.config.limit)||10));
@@ -122,7 +122,7 @@ class NeakasaActivityCard extends HTMLElement{
      const cat=cats.find(c=>typeof c?.name==='string'&&c.name.length&&(record.catName===c.name||message.toLowerCase().includes(c.name.toLowerCase())));
      const entry=make('div','entry'),avatar=make('div','avatar');
      if(cat?.image)photo(avatar,cat.image,'🐱');
-     else{const icon=make('ha-icon');icon.setAttribute('icon',cat?'mdi:cat':/clean/i.test(message)?'mdi:broom':'mdi:information-outline');avatar.append(icon);}
+     else{const icon=make('ha-icon');icon.setAttribute('icon',cat?'mdi:cat':/clean/i.test(message)?'mdi:broom':/level/i.test(message)?'mdi:spirit-level':'mdi:information-outline');avatar.append(icon);}
      const content=make('div');content.append(make('div','time',time.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})));
      const description=make('div','text'),i=cat?message.toLowerCase().indexOf(cat.name.toLowerCase()):-1;
      if(i>=0)description.append(document.createTextNode(message.slice(0,i)),make('strong',null,message.slice(i,i+cat.name.length)),document.createTextNode(message.slice(i+cat.name.length)));
