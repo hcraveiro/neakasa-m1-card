@@ -79,7 +79,7 @@ The selection is local to this card instance: no cat is selected on initial load
 
 ## Integration dependency — no YAML package
 
-All three cards use **native entities** from [Neakasa Litterbox (native history)](https://github.com/hcraveiro/ha-neakasa-litterbox), starting with version **v1.4.4b1**. The **Our Cats** and **Recent Activity** cards do not use external logging packages, input helpers, or automations.
+All three cards use **native entities** from [Neakasa Litterbox (native history)](https://github.com/hcraveiro/ha-neakasa-litterbox), starting with version **v1.4.4b1** (leveling activity requires **v1.4.4b2**). The **Our Cats** and **Recent Activity** cards do not use external logging packages, input helpers, or automations.
 
 | Card | Source |
 | --- | --- |
@@ -91,7 +91,7 @@ All three cards use **native entities** from [Neakasa Litterbox (native history)
 
 **Our Cats:** use `stay: sensor.your_cat_stay_today` or `stay_native: sensor.your_cat_stay_today`. The card formats native seconds as minutes/seconds and can discover a sensor ending in `_<cat_name>_stay_today` if the configured `stay` sensor uses a previous entity ID; it does not read that previous sensor's value.
 
-**Known limitation:** The native Neakasa API history currently provides cat visits and cleaning cycles but not manual leveling events. Those events are therefore not displayed in the card. Daily durations use the device's cloud records and may differ from time measured by older HA automations.
+**Leveling events:** Neakasa Litterbox v1.4.4b2+ records leveling completions observed through MQTT, preserves them across HA restarts and includes them in `events`. Previous leveling events cannot be reconstructed retroactively. The SDK does not reliably distinguish manual from automatic leveling, so the card uses the neutral label **Leveling completed**. Daily durations use the device's cloud records and may differ from time measured by older HA automations.
 
 The obsolete example package has been removed from this repository. **No package, logging helpers or logging automations are required.**
 
