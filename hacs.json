@@ -1,5 +1,6 @@
 {
   "name": "Neakasa M1 Card",
   "content_in_root": true,
-  "filename": "neakasa-m1-card.js"
+  "filename": "neakasa-m1-card.js",
+  "render_readme": true
 }
