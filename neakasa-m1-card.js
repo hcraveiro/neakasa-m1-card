@@ -87,7 +87,7 @@ const CATS_STYLE = `
 .cat-choice[aria-pressed="true"]{border:2px solid var(--primary-color);background:var(--secondary-background-color)}
 .cat-ident{display:flex;align-items:center;flex-direction:column;gap:5px;border-right:1px solid var(--divider-color);padding-right:3px;font-weight:600;font-size:13px}
 .cat-ident img{width:36px;height:36px;object-fit:cover;border-radius:50%}
-.cat-details{display:flex;flex-direction:column;align-items:flex-start;gap:9px;padding-left:12px;font-size:13px;font-weight:650}
+.cat-details{display:flex;flex-direction:column;align-items:flex-start;gap:9px;padding-left:12px;font-size:13px;font-weight:650;width:100%;min-width:0;box-sizing:border-box}.cat-details .detail>span:last-child{justify-self:start;text-align:left}
 .cat-details .detail{display:grid;grid-template-columns:22px minmax(0,1fr);align-items:center;column-gap:7px;width:100%;white-space:nowrap}.cat-details .poop-icon{width:20px;height:20px;font-size:20px;line-height:20px;display:flex;align-items:center;justify-content:center}
 .cat-details ha-icon{width:20px;height:20px;--mdc-icon-size:20px;display:block}
 .cat-panel{border:2px solid var(--primary-color);border-radius:20px;padding:12px 10px 14px}
