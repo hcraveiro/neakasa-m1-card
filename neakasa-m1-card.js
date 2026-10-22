@@ -8,16 +8,43 @@ function shell(host){if(!host.shadowRoot)host.attachShadow({mode:'open'});host.s
 function photo(parent,source,fallback){if(!source){parent.append(make('span',null,fallback));return;}const img=make('img');img.src=source;img.alt='';img.onerror=()=>img.replaceWith(make('span',null,fallback));parent.append(img);}
 class NeakasaM1Card extends HTMLElement{
  setConfig(config){if(!config?.entities?.status)throw Error('entities.status required');this.config={name:"Cat's Toilet",confirm_actions:true,...config};this.draw();}
- set hass(h){this._hass=h;this.draw();}
- connectedCallback(){if(!this._timer)this._timer=setInterval(()=>this.draw(),60000);}
+ set hass(h){this._hass=h;this.update();}
+ connectedCallback(){if(!this._timer)this._timer=setInterval(()=>this.update(),60000);}
  disconnectedCallback(){clearInterval(this._timer);this._timer=null;}
  state(id){return id&&this._hass?.states[id];}
  more(id){if(id)this.dispatchEvent(new CustomEvent('hass-more-info',{bubbles:true,composed:true,detail:{entityId:id}}));}
  dialog(title,choices,callback){const overlay=make('div','overlay');const box=make('div','dialog');box.setAttribute('role','dialog');box.append(make('div','title',title));let select;if(choices){select=make('select');for(const v of choices){const o=make('option',null,`${v}%`);o.value=String(v);select.append(o);}const current=this.state(this.config.entities.calibrate)?.state;const preferred=this.config.calibration?.default??current??90;select.value=String(preferred);box.append(select);}const buttons=make('div','actions');for(const [label,act] of [['Cancel',()=>overlay.remove()],[choices?'Calibrate':'Confirm',()=>{overlay.remove();Promise.resolve(callback(select?Number(select.value):undefined)).catch(error=>console.error('[neakasa-m1-card]',error));}]]){const button=make('button',null,label);button.onclick=act;buttons.append(button);}box.append(buttons);overlay.append(box);overlay.onclick=event=>{if(event.target===overlay)overlay.remove();};this.shadowRoot.append(overlay);}
  action(key){const id=this.config.entities[key];if(!id||!this._hass)return;const service=(value)=>key==='calibrate'?this._hass.callService('number','set_value',{entity_id:id,value}):this._hass.callService('button','press',{entity_id:id});if(key==='calibrate')this.dialog('Cat Litter Calibration',this.config.calibration?.options??[50,60,70,80,90,100],service);else if(this.config.confirm_actions===false)service().catch(console.error);else this.dialog(`Start ${key}?`,null,service);}
- draw(){if(!this.config||!this._hass)return;if(this.shadowRoot?.querySelector('.overlay'))return;const card=shell(this);card.append(make('div','title',this.config.name));const e=this.config.entities,s=this.state(e.status);let status=valid(s?.state)?s.state.replaceAll('_',' ').replace(/^./,c=>c.toUpperCase()):'Unavailable';if(s?.last_updated){const seconds=Math.max(0,Math.floor((Date.now()-Date.parse(s.last_updated))/1000));const n=seconds<3600?Math.floor(seconds/60):seconds<86400?Math.floor(seconds/3600):Math.floor(seconds/86400);const unit=seconds<3600?'minute':seconds<86400?'hour':'day';status+=seconds<60?' (just now)':` (${n} ${unit}${n===1?'':'s'} ago)`;}const label=make('div','subtitle',status);label.style.cursor='pointer';label.onclick=()=>this.more(e.status);card.append(label);const main=make('img','device');main.src=NEAKASA_ASSETS.neakasa;main.alt=this.config.name;card.append(main);
- const metrics=make('div','columns');for(const [key,title,fmt] of [['litter','Cat litter',v=>valid(v)?`${v}%`:'—'],['waste','Waste bin',v=>v==='on'?'Full':v==='off'?'Normal':'—'],['visits','Visits today',v=>valid(v)?v:'—']]){const b=make('button','tile');b.type='button';photo(b,NEAKASA_ASSETS[key],'');b.append(make('div','value',fmt(this.state(e[key])?.state)),make('div','label',title));b.onclick=()=>this.more(e[key]);metrics.append(b);}card.append(metrics);
- const controls=make('div','columns');for(const [key,title] of [['clean','Clean'],['level','Level'],['calibrate','Calibrate']]){const b=make('button','tile action');b.type='button';photo(b,NEAKASA_ASSETS[key],'');b.append(make('div','label',title));b.disabled=!e[key]||!this.state(e[key])||this.state(e[key]).state==='unavailable';b.onclick=()=>this.action(key);controls.append(b);}card.append(controls);}
+ update(){
+   if(!this.config||!this._hass)return;
+   if(!this.shadowRoot?.querySelector('[data-neakasa-status]')){this.draw();return;}
+   const entities=this.config.entities;
+   const statusState=this.state(entities.status);
+   let status=valid(statusState?.state)?statusState.state.replaceAll('_',' ').replace(/^./,char=>char.toUpperCase()):'Unavailable';
+   if(statusState?.last_updated){
+     const seconds=Math.max(0,Math.floor((Date.now()-Date.parse(statusState.last_updated))/1000));
+     const n=seconds<3600?Math.floor(seconds/60):seconds<86400?Math.floor(seconds/3600):Math.floor(seconds/86400);
+     const unit=seconds<3600?'minute':seconds<86400?'hour':'day';
+     status+=seconds<60?' (just now)':` (${n} ${unit}${n===1?'':'s'} ago)`;
+   }
+   this.shadowRoot.querySelector('[data-neakasa-status]').textContent=status;
+   for(const [key,format] of [
+     ['litter',v=>valid(v)?`${v}%`:'—'],
+     ['waste',v=>v==='on'?'Full':v==='off'?'Normal':'—'],
+     ['visits',v=>valid(v)?v:'—']
+   ]){
+     const value=this.shadowRoot.querySelector(`[data-neakasa-metric="${key}"]`);
+     if(value)value.textContent=format(this.state(entities[key])?.state);
+   }
+   for(const key of ['clean','level','calibrate']){
+     const button=this.shadowRoot.querySelector(`[data-neakasa-action="${key}"]`);
+     const state=this.state(entities[key]);
+     if(button)button.disabled=!entities[key]||!state||state.state==='unavailable';
+   }
+ }
+ draw(){if(!this.config||!this._hass)return;if(this.shadowRoot?.querySelector('.overlay'))return;const card=shell(this);card.append(make('div','title',this.config.name));const e=this.config.entities,s=this.state(e.status);let status=valid(s?.state)?s.state.replaceAll('_',' ').replace(/^./,c=>c.toUpperCase()):'Unavailable';if(s?.last_updated){const seconds=Math.max(0,Math.floor((Date.now()-Date.parse(s.last_updated))/1000));const n=seconds<3600?Math.floor(seconds/60):seconds<86400?Math.floor(seconds/3600):Math.floor(seconds/86400);const unit=seconds<3600?'minute':seconds<86400?'hour':'day';status+=seconds<60?' (just now)':` (${n} ${unit}${n===1?'':'s'} ago)`;}const label=make('div','subtitle',status);label.dataset.neakasaStatus='';label.style.cursor='pointer';label.onclick=()=>this.more(e.status);card.append(label);const main=make('img','device');main.src=NEAKASA_ASSETS.neakasa;main.alt=this.config.name;card.append(main);
+ const metrics=make('div','columns');for(const [key,title,fmt] of [['litter','Cat litter',v=>valid(v)?`${v}%`:'—'],['waste','Waste bin',v=>v==='on'?'Full':v==='off'?'Normal':'—'],['visits','Visits today',v=>valid(v)?v:'—']]){const b=make('button','tile');b.type='button';photo(b,NEAKASA_ASSETS[key],'');const value=make('div','value',fmt(this.state(e[key])?.state));value.dataset.neakasaMetric=key;b.append(value,make('div','label',title));b.onclick=()=>this.more(e[key]);metrics.append(b);}card.append(metrics);
+ const controls=make('div','columns');for(const [key,title] of [['clean','Clean'],['level','Level'],['calibrate','Calibrate']]){const b=make('button','tile action');b.type='button';b.dataset.neakasaAction=key;photo(b,NEAKASA_ASSETS[key],'');b.append(make('div','label',title));b.disabled=!e[key]||!this.state(e[key])||this.state(e[key]).state==='unavailable';b.onclick=()=>this.action(key);controls.append(b);}card.append(controls);}
  getCardSize(){return 5;}
  static getStubConfig(){return {entities:{status:'sensor.neakasa_m1_status'}};}
 }
