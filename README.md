@@ -1,6 +1,6 @@
 # Neakasa M1 Card
 
-One JavaScript resource registers **two independent Home Assistant Lovelace cards**.
+One JavaScript resource registers **three independent Home Assistant Lovelace cards**.
 
 The device photograph and all six original Neakasa icons are embedded directly into `neakasa-m1-card.js`. No image files or icon paths are required for the device card.
 
@@ -77,12 +77,34 @@ The selection is local to this card instance: no cat is selected on initial load
 
 **Version 1.1.0:** The card has been tested in Home Assistant. Use the HACS-managed resource after installing the release, or `/local/neakasa-m1-card.js?v=1.1.0` for manual installations. Do not register duplicate versions of the same resource.
 
+## Dependencies and optional example package
+
+**Important:** installing this repository through HACS installs only the JavaScript cards. It does **not** install Home Assistant helpers, automations, packages, or the Neakasa integration.
+
+| Card | Integration entities | Extra package required? |
+| --- | --- | --- |
+| `custom:neakasa-m1-card` | Neakasa status, controls and metrics | **No** |
+| `custom:neakasa-cats-card` | Each cat's weight, last visit and visits today | **Only for the displayed daily stay duration**, unless you provide your own `stay` sensors |
+| `custom:neakasa-activity-card` | `input_text.neakasa_last_event` and its Recorder history | **Yes**, or an equivalent automation/event source that writes that helper |
+
+A **complete reference package** is available at [`examples/neakasa_log.yaml`](examples/neakasa_log.yaml). It includes the event-producing automations, intermediate helpers, the daily stay counters and template sensors. This is **not a universal plug-and-play package**: the example is based on one Neakasa installation with **Cleo, Neffy and Penny**. Adapt the three cat names and entity IDs (last-visit and weight sensors, duration helpers) to your own cats, and confirm the exact states exposed by your integration.
+
+### Installing the example package
+
+1. Check that Home Assistant **packages** are enabled under your `homeassistant:` configuration. For example, `packages: !include_dir_named packages` inside `homeassistant:` in `configuration.yaml`.
+2. Download [`examples/neakasa_log.yaml`](examples/neakasa_log.yaml), adapt its entity IDs and copy it to `/config/packages/neakasa_log.yaml`.
+3. Ensure Recorder tracks `input_text.neakasa_last_event` for at least the number of days configured in the Activity card. **Do not exclude that entity from Recorder.**
+4. Run Home Assistant configuration validation and restart Home Assistant. Check the three automations and the new helpers.
+5. Configure `custom:neakasa-activity-card` with `entity: input_text.neakasa_last_event`. Configure `custom:neakasa-cats-card` with your stay sensor entity IDs.
+
+**Do not install this example over an existing working `neakasa_log.yaml` or duplicate its helpers and automations.** Users who only want the main device card do not need the package. The example is a convenience for reproducing the custom enriched activity timeline; it is not part of, nor automatically configured by, the Neakasa integration.
+
 ## Installation
 
 1. Recommended: install `hcraveiro/neakasa-m1-card` as a custom **Dashboard** repository in HACS, select the latest release, and reload the browser. HACS manages the resource automatically.
 2. Alternatively, for a manual installation save `neakasa-m1-card.js` to `/config/www/neakasa-m1-card.js`.
 3. For manual installations only: in **Settings → Dashboards → Resources**, register `/local/neakasa-m1-card.js?v=1.1.0` as a **JavaScript module**. For HACS installs, do not add a duplicate manual resource.
-4. Add any of the three cards using the YAML examples above.
+4. Add any of the three cards using the YAML examples above. See the Dependencies section before configuring Recent Activity or the daily stay metrics.
 5. When replacing the old activity card, **remove the old `neakasa-activity-card.js` resource**, because both scripts register the same custom element.
 6. After verifying the new cards, remove the old dashboard cards (not the Neakasa integration/entities).
 
