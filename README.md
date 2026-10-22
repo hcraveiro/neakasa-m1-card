@@ -93,7 +93,7 @@ All three cards use **native entities** from [Neakasa Litterbox (native history)
 
 **Known limitation:** The native Neakasa API history currently provides cat visits and cleaning cycles but not manual leveling events. Those events are therefore not displayed in the card. Daily durations use the device's cloud records and may differ from time measured by older HA automations.
 
-The separate [`examples/neakasa_log.yaml`](examples/neakasa_log.yaml) file is retained only as historical reference, **not required, installed, or consumed** by these cards.
+The obsolete example package has been removed from this repository. **No package, logging helpers or logging automations are required.**
 
 
 ## Installation
