@@ -84,7 +84,8 @@ class NeakasaActivityCard extends HTMLElement{
  nativeSensor(){
    const states=this._hass?.states||{};
    const entity=this.config?.activity_entity||this.config?.entity;
-   if(entity)return Array.isArray(states[entity]?.attributes?.events)?states[entity]:null;
+   if(entity&&Array.isArray(states[entity]?.attributes?.events))return states[entity];
+   if(this.config?.activity_entity)return null;
    return Object.entries(states).find(([id,state])=>id.startsWith('sensor.')&&id.endsWith('_recent_activity')&&Array.isArray(state.attributes?.events))?.[1]||null;
  }
  updateRecords(sensor){
