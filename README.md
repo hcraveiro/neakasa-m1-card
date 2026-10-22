@@ -47,7 +47,7 @@ The `title` is optional and hidden by default. Cat names and avatar paths are us
 
 ## Our Cats card (preview)
 
-The optional `custom:neakasa-cats-card` combines cat selection, today's visits and stay duration, last visit, and swipe-like chart switching (Weight and Daily visits, 7 days). It reads existing Home Assistant entities and Recorder history, without requiring ApexCharts, Swipe Card, Button Card, or Stack in Card.
+The optional `custom:neakasa-cats-card` combines a horizontally scrollable, two-visible-cat carousel, today's visits and stay duration, last visit, and touch-swipe chart switching (Weight and Daily visits, 7 days). It reads existing Home Assistant entities and Recorder history, without requiring ApexCharts, Swipe Card, Button Card, or Stack in Card.
 
 ```yaml
 type: custom:neakasa-cats-card
@@ -74,9 +74,9 @@ cats:
     last_visit: sensor.penny_last_visit
 ```
 
-Selecting a cat updates `input_select.neakasa_selected_cat` and tapping the selected cat again chooses `None` (the helper must have this option). The selected cat's detail panel includes a tappable Last visit row and dots to switch between Weight and Daily visits charts. Cat photos remain local user-configurable assets.
+Selecting a cat updates `input_select.neakasa_selected_cat` and tapping the selected cat again chooses `None` (the helper must have this option). The selected cat's detail panel includes a tappable Last visit row and touch swipes or the dots to switch between Weight and Daily visits charts. Cat photos remain local user-configurable assets.
 
-**Testing:** Load the branch JavaScript manually as `/local/neakasa-m1-card.js?v=1.1.0-dev1` in a test view (do not load both this and the stable HACS resource simultaneously). This card has not yet received live Home Assistant frontend validation.
+**Testing:** Load the branch JavaScript manually as `/local/neakasa-m1-card.js?v=1.1.0-dev2` in a test view (do not load both this and the stable HACS resource simultaneously). This card has not yet received live Home Assistant frontend validation.
 
 ## Installation
 
