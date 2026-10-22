@@ -80,7 +80,180 @@ class NeakasaActivityCard extends HTMLElement{
  getCardSize(){return 5;}
  static getStubConfig(){return {entity:'input_text.neakasa_last_event'};}
 }
+
+const CATS_STYLE = \`
+.cat-choices{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-bottom:10px}
+.cat-choice{min-width:0;display:grid;grid-template-columns:minmax(44px,36%) 1fr;align-items:center;min-height:78px;border:1px solid var(--divider-color);border-radius:20px;background:var(--card-background-color);color:var(--primary-text-color);padding:6px;cursor:pointer;font:inherit}
+.cat-choice[aria-pressed="true"]{border:2px solid var(--primary-color);background:var(--secondary-background-color)}
+.cat-ident{display:flex;align-items:center;flex-direction:column;gap:5px;border-right:1px solid var(--divider-color);padding-right:3px;font-weight:600;font-size:13px}
+.cat-ident img{width:36px;height:36px;object-fit:cover;border-radius:50%}
+.cat-details{display:flex;flex-direction:column;align-items:flex-start;gap:9px;padding-left:12px;font-size:13px;font-weight:650}
+.cat-details .detail{display:flex;align-items:center;gap:8px}
+.cat-details ha-icon{width:19px;height:19px}
+.cat-panel{border:2px solid var(--primary-color);border-radius:20px;padding:12px 10px 14px}
+.cat-panel-heading{font-size:17px;font-weight:650;display:flex;align-items:center;gap:6px;margin:0 0 12px 4px}
+.cat-last{padding:12px 14px;border:1px solid var(--divider-color);display:flex;align-items:center;gap:12px;margin-bottom:12px}
+.cat-last ha-icon{color:var(--primary-color)}
+.cat-last span{display:block;font-size:13px;color:var(--secondary-text-color);margin-top:3px}
+.cat-chart{border:1px solid var(--divider-color);border-radius:15px;padding:12px 8px 6px;min-height:260px}
+.cat-chart-title{font-size:15px;color:var(--secondary-text-color);padding:2px 8px 10px}
+.cat-chart svg{display:block;width:100%;height:auto;max-height:295px;overflow:visible}
+.cat-chart .gridline{stroke:var(--divider-color);stroke-dasharray:3 4}
+.cat-chart .axis-label{fill:var(--secondary-text-color);font-size:11px}
+.cat-chart .chart-bar{fill:var(--primary-color)}
+.cat-chart .chart-line{fill:none;stroke:var(--primary-color);stroke-width:2.5;stroke-linejoin:round;stroke-linecap:round}
+.cat-chart .chart-dot{fill:var(--primary-color);stroke:var(--card-background-color);stroke-width:1}
+.cat-switch{display:flex;justify-content:center;gap:14px;padding-top:12px}
+.cat-switch button{border:0;border-radius:50%;width:10px;height:10px;background:var(--disabled-text-color);cursor:pointer;padding:0}
+.cat-switch button[aria-pressed="true"]{background:var(--primary-color)}
+.cat-message{padding:18px;text-align:center;color:var(--secondary-text-color);font-size:13px}
+\`;
+class NeakasaCatsCard extends HTMLElement {
+ setConfig(config){
+   if(!Array.isArray(config?.cats)||!config.cats.length)throw Error('cats array required');
+   this.config={selected_entity:'input_select.neakasa_selected_cat',days:7,...config};
+   this._history=new Map();this._mode='weight';this._lastRefresh=0;
+   this.render();
+ }
+ set hass(h){this._hass=h;this.refreshState();if(this.isConnected&&(!this._lastRefresh||Date.now()-this._lastRefresh>60000))this.loadHistory();}
+ connectedCallback(){this.refreshState();this.loadHistory();if(!this._timer)this._timer=setInterval(()=>this.loadHistory(),60000);}
+ disconnectedCallback(){if(this._timer)clearInterval(this._timer);this._timer=null;}
+ state(entity){return entity?this._hass?.states?.[entity]:null;}
+ selected(){const current=this.state(this.config.selected_entity)?.state;return this.config.cats.find(cat=>cat.name===current)||null;}
+ more(entity){if(entity)this.dispatchEvent(new CustomEvent('hass-more-info',{bubbles:true,composed:true,detail:{entityId:entity}}));}
+ async selectCat(cat){
+   const selected=this.selected()?.name===cat.name?'None':cat.name;
+   try{await this._hass.callService('input_select','select_option',{entity_id:this.config.selected_entity,option:selected});}
+   catch(err){console.error('[neakasa-cats-card] Selection failed',err);}
+ }
+ refreshState(){
+   if(!this.config||!this._hass)return;
+   if(!this.shadowRoot?.querySelector('.cat-choices'))this.render();
+   const selected=this.selected();
+   const name=selected?.name||'';
+   const items=this.shadowRoot?.querySelectorAll('[data-cat-name]')||[];
+   for(const el of items){
+     const cat=this.config.cats.find(item=>item.name===el.dataset.catName);
+     if(!cat)continue;
+     el.setAttribute('aria-pressed',String(name===cat.name));
+     const visits=el.querySelector('[data-visits]');if(visits)visits.textContent=this.state(cat.visits)?.state??'—';
+     const stay=el.querySelector('[data-stay]');if(stay)stay.textContent=this.state(cat.stay)?.state??'—';
+   }
+   if(name!==this._renderedCat){this._renderedCat=name;this.renderPanel();}
+   else{
+     const last=this.shadowRoot?.querySelector('[data-last-visit]');
+     if(last&&selected)last.textContent=this.state(selected.last_visit)?.state??'—';
+   }
+ }
+ render(){
+   if(!this.config)return;
+   const card=shell(this);
+   const style=make('style');style.textContent=CATS_STYLE;this.shadowRoot.append(style);
+   const choices=make('div','cat-choices');
+   for(const cat of this.config.cats){
+     const button=make('button','cat-choice');button.type='button';button.dataset.catName=cat.name;
+     button.setAttribute('aria-label',cat.name);button.setAttribute('aria-pressed','false');
+     const ident=make('div','cat-ident');
+     if(cat.image){const img=make('img');img.src=cat.image;img.alt=cat.name;ident.append(img);}
+     else ident.append(make('span',null,'🐱'));
+     ident.append(make('span',null,cat.name));
+     const details=make('div','cat-details');
+     const visits=make('div','detail');visits.append(make('span',null,'💩'));const visitsValue=make('span',null,'—');visitsValue.dataset.visits='';visits.append(visitsValue);
+     const stay=make('div','detail');const clock=make('ha-icon');clock.setAttribute('icon','mdi:clock-outline');stay.append(clock);
+     const stayValue=make('span',null,'—');stayValue.dataset.stay='';stay.append(stayValue);
+     details.append(visits,stay);button.append(ident,details);button.onclick=()=>this.selectCat(cat);choices.append(button);
+   }
+   card.append(choices);
+   const panel=make('div','cat-panel');panel.dataset.catPanel='';card.append(panel);
+   this._renderedCat=undefined;
+ }
+ renderPanel(){
+   const panel=this.shadowRoot?.querySelector('[data-cat-panel]');
+   if(!panel)return;
+   panel.replaceChildren();
+   const cat=this.selected();
+   if(!cat){panel.style.display='none';return;}
+   panel.style.display='';
+   const heading=make('div','cat-panel-heading');const icon=make('ha-icon');icon.setAttribute('icon','mdi:cat');heading.append(icon,make('span',null,cat.name));panel.append(heading);
+   const last=make('div','cat-last');last.style.cursor='pointer';last.onclick=()=>this.more(cat.last_visit);
+   const clock=make('ha-icon');clock.setAttribute('icon','mdi:clock-outline');
+   const text=make('div',null,'Last visit');const value=make('span',null,this.state(cat.last_visit)?.state??'—');value.dataset.lastVisit='';value.setAttribute('data-last-visit','');
+   text.append(value);last.append(clock,text);panel.append(last);
+   const chart=make('div','cat-chart');chart.dataset.catChart='';panel.append(chart);
+   const switches=make('div','cat-switch');
+   for(const mode of ['weight','visits']){const dot=make('button');dot.type='button';dot.setAttribute('aria-label',mode==='weight'?'Weight chart':'Daily visits chart');dot.setAttribute('aria-pressed',String(this._mode===mode));dot.onclick=()=>{this._mode=mode;this.drawChart();};switches.append(dot);}
+   panel.append(switches);this.drawChart();
+ }
+ async loadHistory(){
+   if(!this._hass||!this.config||this._loading)return;
+   this._loading=true;const days=Math.max(2,Math.min(30,Number(this.config.days)||7));
+   const start=new Date();start.setHours(0,0,0,0);start.setDate(start.getDate()-(days-1));
+   const end=new Date();
+   const entities=[...new Set(this.config.cats.flatMap(cat=>[cat.weight,cat.visits]).filter(Boolean))];
+   try{
+     const params=new URLSearchParams({filter_entity_id:entities.join(','),end_time:end.toISOString(),minimal_response:'0',significant_changes_only:'0',no_attributes:'1'});
+     const raw=await this._hass.callApi('GET',\`history/period/\${encodeURIComponent(start.toISOString())}?\${params.toString()}\`);
+     const history=new Map();
+     for(const series of raw){if(series?.length&&series[0].entity_id)history.set(series[0].entity_id,series);}
+     this._history=history;this._historyError=null;this._lastRefresh=Date.now();
+   }catch(err){this._historyError=err?.message||String(err);console.error('[neakasa-cats-card] History failed',err);this._lastRefresh=Date.now();}
+   finally{this._loading=false;this.drawChart();}
+ }
+ drawChart(){
+   const target=this.shadowRoot?.querySelector('[data-cat-chart]');const cat=this.selected();
+   if(!target||!cat)return;
+   target.replaceChildren();
+   const mode=this._mode,days=Math.max(2,Math.min(30,Number(this.config.days)||7));
+   target.append(make('div','cat-chart-title',\`\${cat.name} · \${mode==='weight'?'Weight':'Daily visits'} (\${days} days)\`));
+   const entity=mode==='weight'?cat.weight:cat.visits;
+   const records=this._history.get(entity)||[];
+   if(this._historyError){target.append(make('div','cat-message','History unavailable'));return;}
+   if(!records.length){target.append(make('div','cat-message',this._loading?'Loading history…':'No history available'));return;}
+   const dayStart=new Date();dayStart.setHours(0,0,0,0);dayStart.setDate(dayStart.getDate()-(days-1));
+   const dates=Array.from({length:days},(_,i)=>{const d=new Date(dayStart);d.setDate(d.getDate()+i);return d;});
+   const buckets=dates.map(()=>[]);
+   for(const row of records){
+     const at=Date.parse(row.last_changed||row.last_updated||'');
+     const value=Number(row.state);
+     if(!Number.isFinite(at)||!Number.isFinite(value))continue;
+     const d=new Date(at);d.setHours(0,0,0,0);
+     const index=Math.round((d-dayStart)/86400000);
+     if(index>=0&&index<days)buckets[index].push({at,value});
+   }
+   const vals=buckets.map(rows=>rows.length?(mode==='visits'?Math.max(...rows.map(x=>x.value)):rows[rows.length-1].value):null);
+   if(mode==='weight'){
+     const points=records.map(row=>({at:Date.parse(row.last_changed||row.last_updated||''),value:Number(row.state)})).filter(p=>Number.isFinite(p.at)&&Number.isFinite(p.value)&&p.at>=dayStart.getTime()).sort((a,b)=>a.at-b.at);
+     this.paintChart(target,dates,vals,points,mode);
+   }else this.paintChart(target,dates,vals,[],mode);
+   const buttons=this.shadowRoot?.querySelectorAll('.cat-switch button')||[];
+   buttons.forEach((b,i)=>b.setAttribute('aria-pressed',String((i===0?'weight':'visits')===mode)));
+ }
+ paintChart(target,dates,values,points,mode){
+   const ns='http://www.w3.org/2000/svg',svg=document.createElementNS(ns,'svg');svg.setAttribute('viewBox','0 0 460 290');svg.setAttribute('role','img');svg.setAttribute('aria-label',mode==='weight'?'Weight over the last seven days':'Daily visits over the last seven days');
+   const W=460,H=290,left=47,right=12,top=30,bottom=36,width=W-left-right,height=H-top-bottom;
+   const nums=mode==='weight'?points.map(p=>p.value):values.filter(v=>v!=null);
+   const low=mode==='visits'?0:nums.length?Math.floor((Math.min(...nums)-.05)*10)/10:0;
+   const high=mode==='visits'?Math.max(4,Math.ceil(Math.max(0,...nums)/2)*2):nums.length?Math.ceil((Math.max(...nums)+.05)*10)/10:1;
+   const max=high<=low?low+1:high,range=max-low;
+   const node=(tag,attrs={},label)=>{const el=document.createElementNS(ns,tag);for(const [k,v] of Object.entries(attrs))el.setAttribute(k,String(v));if(label!==undefined)el.textContent=String(label);svg.append(el);return el;};
+   for(let i=0;i<=4;i++){const y=top+i*height/4;node('line',{x1:left,x2:W-right,y1:y,y2:y,class:'gridline'});const v=max-i*range/4;node('text',{x:left-9,y:y+4,'text-anchor':'end',class:'axis-label'},mode==='visits'?String(Math.round(v)):v.toFixed(1));}
+   dates.forEach((d,i)=>{const x=left+(i+.5)*width/dates.length;node('text',{x,y:H-13,'text-anchor':'middle',class:'axis-label'},d.toLocaleDateString('en-GB',{weekday:'short'}));});
+   const yOf=v=>top+height-(v-low)/range*height;
+   if(mode==='visits'){values.forEach((v,i)=>{if(v==null)return;const band=width/dates.length,x=left+i*band+band*.18,y=yOf(v);node('rect',{x,y,width:band*.64,height:Math.max(0,top+height-y),class:'chart-bar'});if(v>0)node('text',{x:x+band*.32,y:y-7,'text-anchor':'middle',class:'axis-label'},Math.round(v));});}
+   else if(points.length){
+     const first=dates[0].getTime(),end=Date.now(),delta=Math.max(1,end-first);
+     const pairs=points.map(p=>({x:left+(p.at-first)/delta*width,y:yOf(p.value)}));
+     node('polyline',{points:pairs.map(p=>p.x+','+p.y).join(' '),class:'chart-line'});
+     pairs.forEach(p=>node('circle',{cx:p.x,cy:p.y,r:3.4,class:'chart-dot'}));
+   }
+   target.append(svg);
+ }
+ getCardSize(){return 5;}
+ static getStubConfig(){return {selected_entity:'input_select.neakasa_selected_cat',cats:[{name:'Cleo',image:'/local/neakasa/cleo.jpg',weight:'sensor.cleo_weight',visits:'sensor.cleo_visits_today',stay:'sensor.neakasa_cleo_stay_today',last_visit:'sensor.cleo_last_visit'}]};}
+}
+
 if(!customElements.get('neakasa-m1-card'))customElements.define('neakasa-m1-card',NeakasaM1Card);
 if(!customElements.get('neakasa-activity-card'))customElements.define('neakasa-activity-card',NeakasaActivityCard);
+if(!customElements.get('neakasa-cats-card'))customElements.define('neakasa-cats-card',NeakasaCatsCard);
 window.customCards=window.customCards||[];
-for(const item of [{type:'neakasa-m1-card',name:'Neakasa M1',description:'Neakasa M1 device controls'},{type:'neakasa-activity-card',name:'Neakasa Activity',description:'Cat activity log from Recorder'}])if(!window.customCards.some(card=>card.type===item.type))window.customCards.push(item);
+for(const item of [{type:'neakasa-m1-card',name:'Neakasa M1',description:'Neakasa M1 device controls'},{type:'neakasa-activity-card',name:'Neakasa Activity',description:'Cat activity log from Recorder'},{type:'neakasa-cats-card',name:'Neakasa Our Cats',description:'Cat selection, weight and visits charts'}])if(!window.customCards.some(card=>card.type===item.type))window.customCards.push(item);
