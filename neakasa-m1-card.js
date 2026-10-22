@@ -81,7 +81,7 @@ class NeakasaActivityCard extends HTMLElement{
  static getStubConfig(){return {entity:'input_text.neakasa_last_event'};}
 }
 
-const CATS_STYLE = \`
+const CATS_STYLE = `
 .cat-choices{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-bottom:10px}
 .cat-choice{min-width:0;display:grid;grid-template-columns:minmax(44px,36%) 1fr;align-items:center;min-height:78px;border:1px solid var(--divider-color);border-radius:20px;background:var(--card-background-color);color:var(--primary-text-color);padding:6px;cursor:pointer;font:inherit}
 .cat-choice[aria-pressed="true"]{border:2px solid var(--primary-color);background:var(--secondary-background-color)}
@@ -107,7 +107,7 @@ const CATS_STYLE = \`
 .cat-switch button{border:0;border-radius:50%;width:10px;height:10px;background:var(--disabled-text-color);cursor:pointer;padding:0}
 .cat-switch button[aria-pressed="true"]{background:var(--primary-color)}
 .cat-message{padding:18px;text-align:center;color:var(--secondary-text-color);font-size:13px}
-\`;
+`;
 class NeakasaCatsCard extends HTMLElement {
  setConfig(config){
    if(!Array.isArray(config?.cats)||!config.cats.length)throw Error('cats array required');
@@ -192,7 +192,7 @@ class NeakasaCatsCard extends HTMLElement {
    const entities=[...new Set(this.config.cats.flatMap(cat=>[cat.weight,cat.visits]).filter(Boolean))];
    try{
      const params=new URLSearchParams({filter_entity_id:entities.join(','),end_time:end.toISOString(),minimal_response:'0',significant_changes_only:'0',no_attributes:'1'});
-     const raw=await this._hass.callApi('GET',\`history/period/\${encodeURIComponent(start.toISOString())}?\${params.toString()}\`);
+     const raw=await this._hass.callApi('GET',`history/period/${encodeURIComponent(start.toISOString())}?${params.toString()}`);
      const history=new Map();
      for(const series of raw){if(series?.length&&series[0].entity_id)history.set(series[0].entity_id,series);}
      this._history=history;this._historyError=null;this._lastRefresh=Date.now();
@@ -204,7 +204,7 @@ class NeakasaCatsCard extends HTMLElement {
    if(!target||!cat)return;
    target.replaceChildren();
    const mode=this._mode,days=Math.max(2,Math.min(30,Number(this.config.days)||7));
-   target.append(make('div','cat-chart-title',\`\${cat.name} · \${mode==='weight'?'Weight':'Daily visits'} (\${days} days)\`));
+   target.append(make('div','cat-chart-title',`${cat.name} · ${mode==='weight'?'Weight':'Daily visits'} (${days} days)`));
    const entity=mode==='weight'?cat.weight:cat.visits;
    const records=this._history.get(entity)||[];
    if(this._historyError){target.append(make('div','cat-message','History unavailable'));return;}
