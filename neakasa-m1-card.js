@@ -82,14 +82,14 @@ class NeakasaActivityCard extends HTMLElement{
 }
 
 const CATS_STYLE = `
-.cat-choices{display:flex;gap:8px;margin-bottom:10px;overflow-x:auto;scroll-snap-type:x mandatory;overscroll-behavior-x:contain;scrollbar-width:none;-webkit-overflow-scrolling:touch;touch-action:pan-x pan-y}.cat-choices::-webkit-scrollbar{display:none}
+:host ha-card.cats-root{display:block;background:transparent;box-shadow:none;border:0;border-radius:0;padding:0;overflow:visible}.cat-choices{display:flex;gap:8px;margin-bottom:10px;overflow-x:auto;scroll-snap-type:x mandatory;overscroll-behavior-x:contain;scrollbar-width:none;-webkit-overflow-scrolling:touch;touch-action:pan-x pan-y}.cat-choices::-webkit-scrollbar{display:none}
 .cat-choice{flex:0 0 calc((100% - 8px)/2);box-sizing:border-box;scroll-snap-align:start;min-width:0;display:grid;grid-template-columns:minmax(44px,36%) 1fr;align-items:center;min-height:78px;border:1px solid var(--divider-color);border-radius:20px;background:var(--card-background-color);color:var(--primary-text-color);padding:6px;cursor:pointer;font:inherit}
 .cat-choice[aria-pressed="true"]{border:2px solid var(--primary-color);background:var(--secondary-background-color)}
 .cat-ident{display:flex;align-items:center;flex-direction:column;gap:5px;border-right:1px solid var(--divider-color);padding-right:3px;font-weight:600;font-size:13px}
 .cat-ident img{width:36px;height:36px;object-fit:cover;border-radius:50%}
 .cat-details{display:flex;flex-direction:column;align-items:flex-start;gap:9px;padding-left:12px;font-size:13px;font-weight:650}
-.cat-details .detail{display:flex;align-items:center;gap:8px}
-.cat-details ha-icon{width:19px;height:19px}
+.cat-details .detail{display:grid;grid-template-columns:22px minmax(0,1fr);align-items:center;column-gap:7px;width:100%;white-space:nowrap}.cat-details .poop-icon{width:20px;height:20px;font-size:20px;line-height:20px;display:flex;align-items:center;justify-content:center}
+.cat-details ha-icon{width:20px;height:20px;--mdc-icon-size:20px;display:block}
 .cat-panel{border:2px solid var(--primary-color);border-radius:20px;padding:12px 10px 14px}
 .cat-panel-heading{font-size:17px;font-weight:650;display:flex;align-items:center;gap:6px;margin:0 0 12px 4px}
 .cat-last{padding:12px 14px;border:1px solid var(--divider-color);display:flex;align-items:center;gap:12px;margin-bottom:12px}
@@ -111,7 +111,8 @@ const CATS_STYLE = `
 class NeakasaCatsCard extends HTMLElement {
  setConfig(config){
    if(!Array.isArray(config?.cats)||!config.cats.length)throw Error('cats array required');
-   this.config={selected_entity:'input_select.neakasa_selected_cat',days:7,...config};
+   this.config={days:7,...config};
+   this._selectedCat=null;
    this._history=new Map();this._mode='weight';this._lastRefresh=0;
    this.render();
  }
@@ -119,12 +120,11 @@ class NeakasaCatsCard extends HTMLElement {
  connectedCallback(){this.refreshState();this.loadHistory();if(!this._timer)this._timer=setInterval(()=>this.loadHistory(),60000);}
  disconnectedCallback(){if(this._timer)clearInterval(this._timer);this._timer=null;}
  state(entity){return entity?this._hass?.states?.[entity]:null;}
- selected(){const current=this.state(this.config.selected_entity)?.state;return this.config.cats.find(cat=>cat.name===current)||null;}
+ selected(){return this.config.cats.find(cat=>cat.name===this._selectedCat)||null;}
  more(entity){if(entity)this.dispatchEvent(new CustomEvent('hass-more-info',{bubbles:true,composed:true,detail:{entityId:entity}}));}
- async selectCat(cat){
-   const selected=this.selected()?.name===cat.name?'None':cat.name;
-   try{await this._hass.callService('input_select','select_option',{entity_id:this.config.selected_entity,option:selected});}
-   catch(err){console.error('[neakasa-cats-card] Selection failed',err);}
+ selectCat(cat){
+   this._selectedCat=this._selectedCat===cat.name?null:cat.name;
+   this.refreshState();
  }
  refreshState(){
    if(!this.config||!this._hass)return;
@@ -148,6 +148,7 @@ class NeakasaCatsCard extends HTMLElement {
  render(){
    if(!this.config)return;
    const card=shell(this);
+   card.classList.add('cats-root');
    const style=make('style');style.textContent=CATS_STYLE;this.shadowRoot.append(style);
    const choices=make('div','cat-choices');
    for(const cat of this.config.cats){
@@ -158,7 +159,7 @@ class NeakasaCatsCard extends HTMLElement {
      else ident.append(make('span',null,'🐱'));
      ident.append(make('span',null,cat.name));
      const details=make('div','cat-details');
-     const visits=make('div','detail');visits.append(make('span',null,'💩'));const visitsValue=make('span',null,'—');visitsValue.dataset.visits='';visits.append(visitsValue);
+     const visits=make('div','detail');visits.append(make('span','poop-icon','💩'));const visitsValue=make('span',null,'—');visitsValue.dataset.visits='';visits.append(visitsValue);
      const stay=make('div','detail');const clock=make('ha-icon');clock.setAttribute('icon','mdi:clock-outline');stay.append(clock);
      const stayValue=make('span',null,'—');stayValue.dataset.stay='';stay.append(stayValue);
      details.append(visits,stay);button.append(ident,details);button.onclick=()=>this.selectCat(cat);choices.append(button);
@@ -277,7 +278,7 @@ class NeakasaCatsCard extends HTMLElement {
    target.append(svg);
  }
  getCardSize(){return 5;}
- static getStubConfig(){return {selected_entity:'input_select.neakasa_selected_cat',cats:[{name:'Cleo',image:'/local/neakasa/cleo.jpg',weight:'sensor.cleo_weight',visits:'sensor.cleo_visits_today',stay:'sensor.neakasa_cleo_stay_today',last_visit:'sensor.cleo_last_visit'}]};}
+ static getStubConfig(){return {cats:[{name:'Cleo',image:'/local/neakasa/cleo.jpg',weight:'sensor.cleo_weight',visits:'sensor.cleo_visits_today',stay:'sensor.neakasa_cleo_stay_today',last_visit:'sensor.cleo_last_visit'}]};}
 }
 
 if(!customElements.get('neakasa-m1-card'))customElements.define('neakasa-m1-card',NeakasaM1Card);
