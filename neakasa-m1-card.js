@@ -136,12 +136,8 @@ class NeakasaActivityCard extends HTMLElement{
 
 const CATS_STYLE = `
 :host ha-card.cats-root{display:block;background:transparent;box-shadow:none;border:0;border-radius:0;padding:0;overflow:visible}.cat-choices{display:flex;gap:8px;margin-bottom:10px;overflow-x:auto;scroll-snap-type:x mandatory;overscroll-behavior-x:contain;scrollbar-width:none;-webkit-overflow-scrolling:touch;touch-action:pan-x pan-y}.cat-choices::-webkit-scrollbar{display:none}
-.cat-choices-wrap{position:relative}
-.cat-nav{display:none;position:absolute;top:50%;transform:translateY(-50%);z-index:1;width:30px;height:38px;border:1px solid var(--divider-color);border-radius:12px;background:var(--card-background-color);color:var(--primary-text-color);box-shadow:0 2px 8px #0003;align-items:center;justify-content:center;cursor:pointer;padding:0}
-.cat-nav ha-icon{--mdc-icon-size:19px}.cat-nav.prev{left:0}.cat-nav.next{right:0}.cat-nav:disabled{opacity:.25;cursor:default}
-.cat-chart-nav{display:none;align-items:center;justify-content:center;border:0;background:none;color:var(--primary-text-color);cursor:pointer;padding:4px}
-.cat-chart-nav ha-icon{--mdc-icon-size:20px}.cat-chart-nav:disabled{opacity:.25;cursor:default}
-@media (hover:hover) and (pointer:fine){.cat-nav{display:flex}.cat-choices-wrap{padding:0 32px}.cat-chart-nav{display:flex}}
+.cat-choices{cursor:grab;user-select:none;-webkit-user-select:none}.cat-choices.is-dragging{cursor:grabbing;scroll-snap-type:none}.cat-choices img{pointer-events:none}
+.cat-chart{cursor:grab}.cat-chart.is-dragging{cursor:grabbing}
 .cat-choice{flex:0 0 calc((100% - 8px)/2);box-sizing:border-box;scroll-snap-align:start;min-width:0;display:grid;grid-template-columns:minmax(44px,36%) 1fr;align-items:center;min-height:78px;border:1px solid var(--divider-color);border-radius:20px;background:var(--card-background-color);color:var(--primary-text-color);padding:6px;cursor:pointer;font:inherit}
 .cat-choice[aria-pressed="true"]{border:2px solid var(--primary-color);background:var(--secondary-background-color)}
 .cat-ident{display:flex;align-items:center;flex-direction:column;gap:5px;border-right:1px solid var(--divider-color);padding-right:3px;font-weight:600;font-size:13px}
@@ -237,24 +233,42 @@ class NeakasaCatsCard extends HTMLElement {
      const stayValue=make('span',null,'—');stayValue.dataset.stay='';stay.append(stayValue);
      details.append(visits,stay);button.append(ident,details);button.onclick=()=>this.selectCat(cat);choices.append(button);
    }
-   const choicesWrap=make('div','cat-choices-wrap');
-   const previous=make('button','cat-nav prev');previous.type='button';previous.setAttribute('aria-label','Previous cats');
-   const previousIcon=make('ha-icon');previousIcon.setAttribute('icon','mdi:chevron-left');previous.append(previousIcon);
-   const next=make('button','cat-nav next');next.type='button';next.setAttribute('aria-label','Next cats');
-   const nextIcon=make('ha-icon');nextIcon.setAttribute('icon','mdi:chevron-right');next.append(nextIcon);
-   const move=direction=>{
-     const first=choices.querySelector('.cat-choice');
-     if(!first)return;
-     choices.scrollBy({left:direction*(first.getBoundingClientRect().width+8),behavior:'smooth'});
+   // Pointer drag provides desktop swipe while native touch scrolling stays enabled.
+   let drag=null;
+   let suppressClick=false;
+   choices.addEventListener('pointerdown',event=>{
+     if(event.pointerType!=='mouse'||event.button!==0)return;
+     drag={id:event.pointerId,x:event.clientX,y:event.clientY,left:choices.scrollLeft,moved:false};
+   });
+   choices.addEventListener('pointermove',event=>{
+     if(!drag||event.pointerId!==drag.id)return;
+     const dx=event.clientX-drag.x,dy=event.clientY-drag.y;
+     if(!drag.moved&&Math.abs(dx)>7&&Math.abs(dx)>Math.abs(dy)){
+       drag.moved=true;choices.classList.add('is-dragging');choices.setPointerCapture(event.pointerId);
+     }
+     if(drag.moved){choices.scrollLeft=drag.left-dx;event.preventDefault();}
+   });
+   const finishDrag=event=>{
+     if(!drag||event.pointerId!==drag.id)return;
+     if(drag.moved){
+       suppressClick=true;
+       choices.classList.remove('is-dragging');
+       if(choices.hasPointerCapture(event.pointerId))choices.releasePointerCapture(event.pointerId);
+       const first=choices.querySelector('.cat-choice');
+       if(first){
+         const step=first.getBoundingClientRect().width+8;
+         choices.scrollTo({left:Math.round(choices.scrollLeft/step)*step,behavior:'smooth'});
+       }
+     }
+     drag=null;
    };
-   previous.onclick=()=>move(-1);next.onclick=()=>move(1);
-   const updateArrows=()=>{
-     previous.disabled=choices.scrollLeft<2;
-     next.disabled=choices.scrollLeft+choices.clientWidth>=choices.scrollWidth-2;
-   };
-   choices.addEventListener('scroll',updateArrows,{passive:true});
-   choicesWrap.append(choices,previous,next);card.append(choicesWrap);
-   requestAnimationFrame(updateArrows);
+   choices.addEventListener('pointerup',finishDrag);
+   choices.addEventListener('pointercancel',finishDrag);
+   choices.addEventListener('click',event=>{
+     if(!suppressClick)return;
+     event.preventDefault();event.stopPropagation();suppressClick=false;
+   },true);
+   card.append(choices);
    const panel=make('div','cat-panel');panel.dataset.catPanel='';card.append(panel);
    this._renderedCat=undefined;
  }
@@ -283,32 +297,37 @@ class NeakasaCatsCard extends HTMLElement {
    const text=make('div',null,'Last visit');const value=make('span',null,this.formatLastVisit(this.state(cat.last_visit)?.state));value.dataset.lastVisit='';value.setAttribute('data-last-visit','');
    text.append(value);last.append(clock,text);panel.append(last);
    const chart=make('div','cat-chart');chart.dataset.catChart='';panel.append(chart);
-   let touchStart=null;
-   chart.addEventListener('touchstart',event=>{
-     if(event.touches.length!==1)return;
-     touchStart={x:event.touches[0].clientX,y:event.touches[0].clientY};
-   },{passive:true});
-   chart.addEventListener('touchend',event=>{
-     if(!touchStart||!event.changedTouches.length)return;
-     const dx=event.changedTouches[0].clientX-touchStart.x;
-     const dy=event.changedTouches[0].clientY-touchStart.y;
-     touchStart=null;
-     if(Math.abs(dx)>45&&Math.abs(dx)>Math.abs(dy)*1.25){
+   // Pointer events support both touch swipes and mouse dragging in the chart.
+   let swipe=null;
+   chart.addEventListener('pointerdown',event=>{
+     if(event.pointerType==='mouse'&&event.button!==0)return;
+     swipe={id:event.pointerId,x:event.clientX,y:event.clientY,moved:false};
+   });
+   chart.addEventListener('pointermove',event=>{
+     if(!swipe||event.pointerId!==swipe.id)return;
+     const dx=event.clientX-swipe.x,dy=event.clientY-swipe.y;
+     if(!swipe.moved&&Math.abs(dx)>9&&Math.abs(dx)>Math.abs(dy)*1.25){
+       swipe.moved=true;chart.classList.add('is-dragging');
+       if(event.pointerType==='mouse')chart.setPointerCapture(event.pointerId);
+     }
+   });
+   const finishSwipe=event=>{
+     if(!swipe||event.pointerId!==swipe.id)return;
+     const dx=event.clientX-swipe.x,dy=event.clientY-swipe.y;
+     if(swipe.moved&&Math.abs(dx)>45&&Math.abs(dx)>Math.abs(dy)*1.25){
        const next=dx<0?'visits':'weight';
        if(next!==this._mode){this._mode=next;this.drawChart();}
      }
-   },{passive:true});
-   chart.addEventListener('touchcancel',()=>{touchStart=null;});
+     if(chart.hasPointerCapture(event.pointerId))chart.releasePointerCapture(event.pointerId);
+     chart.classList.remove('is-dragging');swipe=null;
+   };
+   chart.addEventListener('pointerup',finishSwipe);
+   chart.addEventListener('pointercancel',event=>{
+     if(chart.hasPointerCapture(event.pointerId))chart.releasePointerCapture(event.pointerId);
+     chart.classList.remove('is-dragging');swipe=null;
+   });
    const switches=make('div','cat-switch');
-   const previousChart=make('button','cat-chart-nav');previousChart.type='button';previousChart.setAttribute('aria-label','Previous chart');
-   const previousChartIcon=make('ha-icon');previousChartIcon.setAttribute('icon','mdi:chevron-left');previousChart.append(previousChartIcon);
-   previousChart.onclick=()=>{this._mode='weight';this.drawChart();};
-   switches.append(previousChart);
    for(const mode of ['weight','visits']){const dot=make('button');dot.type='button';dot.setAttribute('aria-label',mode==='weight'?'Weight chart':'Daily visits chart');dot.setAttribute('aria-pressed',String(this._mode===mode));dot.onclick=()=>{this._mode=mode;this.drawChart();};switches.append(dot);}
-   const nextChart=make('button','cat-chart-nav');nextChart.type='button';nextChart.setAttribute('aria-label','Next chart');
-   const nextChartIcon=make('ha-icon');nextChartIcon.setAttribute('icon','mdi:chevron-right');nextChart.append(nextChartIcon);
-   nextChart.onclick=()=>{this._mode='visits';this.drawChart();};
-   switches.append(nextChart);
    panel.append(switches);this.drawChart();
  }
  async loadHistory(){
@@ -352,11 +371,8 @@ class NeakasaCatsCard extends HTMLElement {
      const points=records.map(row=>({at:Date.parse(row.last_changed||row.last_updated||''),value:Number(row.state)})).filter(p=>Number.isFinite(p.at)&&Number.isFinite(p.value)&&p.at>=dayStart.getTime()).sort((a,b)=>a.at-b.at);
      this.paintChart(target,dates,vals,points,mode);
    }else this.paintChart(target,dates,vals,[],mode);
-   const buttons=this.shadowRoot?.querySelectorAll('.cat-switch button:not(.cat-chart-nav)')||[];
+   const buttons=this.shadowRoot?.querySelectorAll('.cat-switch button')||[];
    buttons.forEach((b,i)=>b.setAttribute('aria-pressed',String((i===0?'weight':'visits')===mode)));
-   const chartArrows=this.shadowRoot?.querySelectorAll('.cat-chart-nav')||[];
-   if(chartArrows[0])chartArrows[0].disabled=mode==='weight';
-   if(chartArrows[1])chartArrows[1].disabled=mode==='visits';
  }
  paintChart(target,dates,values,points,mode){
    const ns='http://www.w3.org/2000/svg',svg=document.createElementNS(ns,'svg');svg.setAttribute('viewBox','0 0 460 290');svg.setAttribute('role','img');svg.setAttribute('aria-label',mode==='weight'?'Weight over the last seven days':'Daily visits over the last seven days');
