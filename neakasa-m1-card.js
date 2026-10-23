@@ -136,6 +136,8 @@ class NeakasaActivityCard extends HTMLElement{
 
 const CATS_STYLE = `
 :host ha-card.cats-root{display:block;background:transparent;box-shadow:none;border:0;border-radius:0;padding:0;overflow:visible}.cat-choices{display:flex;gap:8px;margin-bottom:10px;overflow-x:auto;scroll-snap-type:x mandatory;overscroll-behavior-x:contain;scrollbar-width:none;-webkit-overflow-scrolling:touch;touch-action:pan-x pan-y}.cat-choices::-webkit-scrollbar{display:none}
+.cat-choices{cursor:grab;user-select:none;-webkit-user-select:none}.cat-choices.is-dragging{cursor:grabbing;scroll-snap-type:none}.cat-choices img{pointer-events:none}
+.cat-chart{cursor:grab}.cat-chart.is-dragging{cursor:grabbing}
 .cat-choice{flex:0 0 calc((100% - 8px)/2);box-sizing:border-box;scroll-snap-align:start;min-width:0;display:grid;grid-template-columns:minmax(44px,36%) 1fr;align-items:center;min-height:78px;border:1px solid var(--divider-color);border-radius:20px;background:var(--card-background-color);color:var(--primary-text-color);padding:6px;cursor:pointer;font:inherit}
 .cat-choice[aria-pressed="true"]{border:2px solid var(--primary-color);background:var(--secondary-background-color)}
 .cat-ident{display:flex;align-items:center;flex-direction:column;gap:5px;border-right:1px solid var(--divider-color);padding-right:3px;font-weight:600;font-size:13px}
@@ -231,6 +233,41 @@ class NeakasaCatsCard extends HTMLElement {
      const stayValue=make('span',null,'—');stayValue.dataset.stay='';stay.append(stayValue);
      details.append(visits,stay);button.append(ident,details);button.onclick=()=>this.selectCat(cat);choices.append(button);
    }
+   // Pointer drag provides desktop swipe while native touch scrolling stays enabled.
+   let drag=null;
+   let suppressClick=false;
+   choices.addEventListener('pointerdown',event=>{
+     if(event.pointerType!=='mouse'||event.button!==0)return;
+     drag={id:event.pointerId,x:event.clientX,y:event.clientY,left:choices.scrollLeft,moved:false};
+   });
+   choices.addEventListener('pointermove',event=>{
+     if(!drag||event.pointerId!==drag.id)return;
+     const dx=event.clientX-drag.x,dy=event.clientY-drag.y;
+     if(!drag.moved&&Math.abs(dx)>7&&Math.abs(dx)>Math.abs(dy)){
+       drag.moved=true;choices.classList.add('is-dragging');choices.setPointerCapture(event.pointerId);
+     }
+     if(drag.moved){choices.scrollLeft=drag.left-dx;event.preventDefault();}
+   });
+   const finishDrag=event=>{
+     if(!drag||event.pointerId!==drag.id)return;
+     if(drag.moved){
+       suppressClick=true;
+       choices.classList.remove('is-dragging');
+       if(choices.hasPointerCapture(event.pointerId))choices.releasePointerCapture(event.pointerId);
+       const first=choices.querySelector('.cat-choice');
+       if(first){
+         const step=first.getBoundingClientRect().width+8;
+         choices.scrollTo({left:Math.round(choices.scrollLeft/step)*step,behavior:'smooth'});
+       }
+     }
+     drag=null;
+   };
+   choices.addEventListener('pointerup',finishDrag);
+   choices.addEventListener('pointercancel',finishDrag);
+   choices.addEventListener('click',event=>{
+     if(!suppressClick)return;
+     event.preventDefault();event.stopPropagation();suppressClick=false;
+   },true);
    card.append(choices);
    const panel=make('div','cat-panel');panel.dataset.catPanel='';card.append(panel);
    this._renderedCat=undefined;
@@ -260,22 +297,35 @@ class NeakasaCatsCard extends HTMLElement {
    const text=make('div',null,'Last visit');const value=make('span',null,this.formatLastVisit(this.state(cat.last_visit)?.state));value.dataset.lastVisit='';value.setAttribute('data-last-visit','');
    text.append(value);last.append(clock,text);panel.append(last);
    const chart=make('div','cat-chart');chart.dataset.catChart='';panel.append(chart);
-   let touchStart=null;
-   chart.addEventListener('touchstart',event=>{
-     if(event.touches.length!==1)return;
-     touchStart={x:event.touches[0].clientX,y:event.touches[0].clientY};
-   },{passive:true});
-   chart.addEventListener('touchend',event=>{
-     if(!touchStart||!event.changedTouches.length)return;
-     const dx=event.changedTouches[0].clientX-touchStart.x;
-     const dy=event.changedTouches[0].clientY-touchStart.y;
-     touchStart=null;
-     if(Math.abs(dx)>45&&Math.abs(dx)>Math.abs(dy)*1.25){
+   // Pointer events support both touch swipes and mouse dragging in the chart.
+   let swipe=null;
+   chart.addEventListener('pointerdown',event=>{
+     if(event.pointerType==='mouse'&&event.button!==0)return;
+     swipe={id:event.pointerId,x:event.clientX,y:event.clientY,moved:false};
+   });
+   chart.addEventListener('pointermove',event=>{
+     if(!swipe||event.pointerId!==swipe.id)return;
+     const dx=event.clientX-swipe.x,dy=event.clientY-swipe.y;
+     if(!swipe.moved&&Math.abs(dx)>9&&Math.abs(dx)>Math.abs(dy)*1.25){
+       swipe.moved=true;chart.classList.add('is-dragging');
+       if(event.pointerType==='mouse')chart.setPointerCapture(event.pointerId);
+     }
+   });
+   const finishSwipe=event=>{
+     if(!swipe||event.pointerId!==swipe.id)return;
+     const dx=event.clientX-swipe.x,dy=event.clientY-swipe.y;
+     if(swipe.moved&&Math.abs(dx)>45&&Math.abs(dx)>Math.abs(dy)*1.25){
        const next=dx<0?'visits':'weight';
        if(next!==this._mode){this._mode=next;this.drawChart();}
      }
-   },{passive:true});
-   chart.addEventListener('touchcancel',()=>{touchStart=null;});
+     if(chart.hasPointerCapture(event.pointerId))chart.releasePointerCapture(event.pointerId);
+     chart.classList.remove('is-dragging');swipe=null;
+   };
+   chart.addEventListener('pointerup',finishSwipe);
+   chart.addEventListener('pointercancel',event=>{
+     if(chart.hasPointerCapture(event.pointerId))chart.releasePointerCapture(event.pointerId);
+     chart.classList.remove('is-dragging');swipe=null;
+   });
    const switches=make('div','cat-switch');
    for(const mode of ['weight','visits']){const dot=make('button');dot.type='button';dot.setAttribute('aria-label',mode==='weight'?'Weight chart':'Daily visits chart');dot.setAttribute('aria-pressed',String(this._mode===mode));dot.onclick=()=>{this._mode=mode;this.drawChart();};switches.append(dot);}
    panel.append(switches);this.drawChart();
