@@ -6,7 +6,7 @@ const source = fs.readFileSync('neakasa-m1-card.js', 'utf8');
 const start = source.indexOf('nativeStaySensor(cat){');
 const end = source.indexOf('\n formatStay(cat){', start);
 assert.ok(start >= 0 && end > start, 'Native stay sensor method must exist');
-const methodBody = source.slice(start + 'nativeStaySensor(cat){'.length, end);
+const methodBody = source.slice(start + 'nativeStaySensor(cat){'.length, end).trim().replace(/}\s*$/, '');
 const nativeStaySensor = new Function('cat', methodBody);
 
 function resolve(cat, states) {
