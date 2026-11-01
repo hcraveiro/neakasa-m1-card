@@ -186,3 +186,43 @@ test('Our Cats editor stub uses the official duration entity', () => {
   const example = classes['neakasa-cats-card'].getStubConfig();
   assert.match(example.cats[0].stay, /_time_in_box_today$/);
 });
+
+test('Recent Activity queues an event received during an in-flight history request', async () => {
+  const card = new classes['neakasa-activity-card']();
+  const entityId = 'event.neakasa_m1_activity';
+  card.config = { entity: entityId, days: 7, limit: 10, cats: [] };
+  card.draw = () => {};
+  let resolveFirst;
+  let calls = 0;
+  const timestamp = new Date().toISOString();
+  const event = (id, type) => ({ a: {
+    record_id: id, event_type: type, started_at: timestamp, ended_at: timestamp, duration_seconds: 38,
+  } });
+  card._hass = {
+    states: { [entityId]: { last_changed: 'first', attributes: {} } },
+    callWS: () => {
+      calls += 1;
+      if (calls === 1) return new Promise((resolve) => { resolveFirst = resolve; });
+      return Promise.resolve({ [entityId]: [event(1, 'cleaning_completed'), event(2, 'leveling_completed')] });
+    },
+  };
+  const first = card.loadHistory(entityId);
+  await card.loadHistory(entityId);
+  resolveFirst({ [entityId]: [event(1, 'cleaning_completed')] });
+  await first;
+  for (let i = 0; i < 10 && calls < 2; i += 1) await Promise.resolve();
+  assert.equal(calls, 2);
+  assert.equal(card.records.length, 2);
+  assert.match(card.records[0].message, /Leveling completed/);
+});
+
+test('Recent Activity starts and stops its background refresh with card lifecycle', () => {
+  const card = new classes['neakasa-activity-card']();
+  card.config = { entity: 'event.neakasa_m1_activity', days: 7, limit: 10, cats: [] };
+  card.draw = () => {};
+  card._hass = { states: {} };
+  card.connectedCallback();
+  assert.ok(card._refreshTimer);
+  card.disconnectedCallback();
+  assert.equal(card._refreshTimer, null);
+});
