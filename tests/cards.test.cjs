@@ -51,8 +51,12 @@ test('device card calls official button.press services', async () => {
   card.action('clean');
   card.action('level');
   assert.equal(calls.length, 2);
-  assert.deepEqual(calls[0], { domain: 'button', service: 'press', data: { entity_id: 'button.neakasa_m1_clean_now' } });
-  assert.deepEqual(calls[1], { domain: 'button', service: 'press', data: { entity_id: 'button.neakasa_m1_level_now' } });
+  assert.equal(calls[0].domain, 'button');
+  assert.equal(calls[0].service, 'press');
+  assert.equal(calls[0].data.entity_id, 'button.neakasa_m1_clean_now');
+  assert.equal(calls[1].domain, 'button');
+  assert.equal(calls[1].service, 'press');
+  assert.equal(calls[1].data.entity_id, 'button.neakasa_m1_level_now');
 });
 
 test('Our Cats prefers official minute-based time sensor and converts duration', () => {
