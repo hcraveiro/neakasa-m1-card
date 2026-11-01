@@ -140,3 +140,48 @@ test('activity history handles array-form websocket responses', async () => {
   await card.loadHistory('event.neakasa_m1_activity');
   assert.equal(card.records.length, 1);
 });
+
+test('device card calls official number.set_value for sand calibration', async () => {
+  const card = new classes['neakasa-m1-card']();
+  const calls = [];
+  card.config = {
+    entities: { calibrate: 'number.neakasa_m1_sand_calibration' },
+    calibration: { options: [50, 60, 70, 80, 90, 100] },
+  };
+  card._hass = { callService: async (domain, service, data) => { calls.push({ domain, service, data }); } };
+  card.dialog = (title, choices, callback) => callback(90);
+  card.action('calibrate');
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].domain, 'number');
+  assert.equal(calls[0].service, 'set_value');
+  assert.equal(calls[0].data.entity_id, 'number.neakasa_m1_sand_calibration');
+  assert.equal(calls[0].data.value, 90);
+});
+
+test('Our Cats keeps Recorder history for weight and daily visits', async () => {
+  const card = new classes['neakasa-cats-card']();
+  card.config = { days: 7, cats: [
+    { name: 'Cleo', weight: 'sensor.cleo_weight', visits: 'sensor.cleo_visits_today' },
+  ] };
+  card._history = new Map();
+  card.drawChart = () => {};
+  let requestedPath = '';
+  card._hass = { callApi: async (method, path) => {
+    assert.equal(method, 'GET');
+    requestedPath = path;
+    return [
+      [{ entity_id: 'sensor.cleo_weight', state: '3.8', last_changed: new Date().toISOString() }],
+      [{ entity_id: 'sensor.cleo_visits_today', state: '8', last_changed: new Date().toISOString() }],
+    ];
+  } };
+  await card.loadHistory();
+  assert.match(requestedPath, /sensor.cleo_weight/);
+  assert.match(requestedPath, /sensor.cleo_visits_today/);
+  assert.equal(card._history.get('sensor.cleo_weight')[0].state, '3.8');
+  assert.equal(card._history.get('sensor.cleo_visits_today')[0].state, '8');
+});
+
+test('Our Cats editor stub uses the official duration entity', () => {
+  const example = classes['neakasa-cats-card'].getStubConfig();
+  assert.match(example.cats[0].stay, /_time_in_box_today$/);
+});
