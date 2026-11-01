@@ -85,7 +85,16 @@ class NeakasaActivityCard extends HTMLElement{
      if(signature!==this._nativeSignature||Date.now()-this._lastRefresh>60000){this._nativeSignature=signature;this.loadHistory(source.id);}
    }else if(this._nativeSignature!=='unavailable'){this._nativeSignature='unavailable';this.records=null;this.draw();}
  }
- connectedCallback(){if(this._hass)this.hass=this._hass;}
+ connectedCallback(){
+   if(this._hass)this.hass=this._hass;
+   // Recheck Recorder periodically in case an event arrived during an in-flight request.
+   if(!this._refreshTimer)this._refreshTimer=setInterval(()=>{
+     if(this._hass&&this.activitySource()?.mode==='event')this.hass=this._hass;
+   },15000);
+ }
+ disconnectedCallback(){
+   if(this._refreshTimer){clearInterval(this._refreshTimer);this._refreshTimer=null;}
+ }
  activitySource(){
    const states=this._hass?.states||{},configured=this.config?.activity_entity||this.config?.entity;
    if(configured?.startsWith('event.'))return states[configured]?{mode:'event',id:configured,state:states[configured]}:null;
@@ -102,7 +111,8 @@ class NeakasaActivityCard extends HTMLElement{
    return legacy?{mode:'legacy',state:legacy[1]}:null;
  }
  async loadHistory(entityId){
-   if(this._loading||!this._hass?.callWS)return;
+   if(!this._hass?.callWS)return;
+   if(this._loading){this._queuedEntityId=entityId;return;}
    this._loading=true;this._lastRefresh=Date.now();
    try{
      const days=Math.max(1,Math.min(30,Number(this.config.days)||7));
@@ -113,7 +123,13 @@ class NeakasaActivityCard extends HTMLElement{
      }));
      if(this.activitySource()?.id===entityId){this.updateRecords(events);this._historyError=null;}
    }catch(error){this._historyError=String(error);console.error('[neakasa-activity-card] History failed',error);this.records=null;this.draw();}
-   finally{this._loading=false;}
+   finally{
+     this._loading=false;
+     // Never discard an update that arrived while Recorder was loading.
+     const queued=this._queuedEntityId;
+     this._queuedEntityId=null;
+     if(queued&&this.activitySource()?.id===queued)Promise.resolve().then(()=>this.loadHistory(queued));
+   }
  }
  updateRecords(events){
    if(!this.config)return;
