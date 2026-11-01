@@ -88,12 +88,16 @@ class NeakasaActivityCard extends HTMLElement{
  connectedCallback(){if(this._hass)this.hass=this._hass;}
  activitySource(){
    const states=this._hass?.states||{},configured=this.config?.activity_entity||this.config?.entity;
-   if(configured&&states[configured]){
-     if(configured.startsWith('event.'))return {mode:'event',id:configured,state:states[configured]};
-     if(Array.isArray(states[configured].attributes?.events))return {mode:'legacy',state:states[configured]};
+   if(configured?.startsWith('event.'))return states[configured]?{mode:'event',id:configured,state:states[configured]}:null;
+   const events=Object.entries(states).filter(([id])=>id.startsWith('event.')&&id.endsWith('_activity'));
+   // Match the same litter box when a legacy sensor is explicitly configured.
+   if(configured?.startsWith('sensor.')&&events.length){
+     const name=configured.split('.').pop().replace(/_recent_activity$/,'');
+     const match=events.find(([id])=>name.endsWith(id.split('.').pop().replace(/_activity$/,'')));
+     if(match)return {mode:'event',id:match[0],state:match[1]};
    }
-   const event=Object.entries(states).find(([id])=>id.startsWith('event.')&&id.endsWith('_activity'));
-   if(event)return {mode:'event',id:event[0],state:event[1]};
+   if(events.length===1)return {mode:'event',id:events[0][0],state:events[0][1]};
+   if(configured&&Array.isArray(states[configured]?.attributes?.events))return {mode:'legacy',state:states[configured]};
    const legacy=Object.entries(states).find(([id,state])=>id.startsWith('sensor.')&&id.endsWith('_recent_activity')&&Array.isArray(state.attributes?.events));
    return legacy?{mode:'legacy',state:legacy[1]}:null;
  }
@@ -203,14 +207,21 @@ class NeakasaCatsCard extends HTMLElement {
  nativeStaySensor(cat){
    const states=this._hass?.states||{};
    const configured=cat.stay_native||cat.stay;
-   if(configured&&states[configured]?.attributes?.unit_of_measurement==='s')return states[configured];
+   const supported=state=>state&&['s','min','h'].includes(state.attributes?.unit_of_measurement)&&valid(state.state);
    const slug=cat.name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'');
-   return Object.entries(states).find(([id,state])=>id.startsWith('sensor.')&&id.endsWith('_'+slug+'_stay_today')&&state.attributes?.unit_of_measurement==='s')?.[1]||null;
+   // Official v1.6.0 uses time_in_box_today (usually minutes).
+   // The older fork exposes stay_today (seconds); prefer the official sensor.
+   if(configured&&!configured.endsWith('_stay_today')&&supported(states[configured]))return states[configured];
+   const official=Object.entries(states).find(([id,state])=>id.startsWith('sensor.')&&id.endsWith('_'+slug+'_time_in_box_today')&&supported(state));
+   if(official)return official[1];
+   if(configured&&supported(states[configured]))return states[configured];
+   return Object.entries(states).find(([id,state])=>id.startsWith('sensor.')&&id.endsWith('_'+slug+'_stay_today')&&supported(state))?.[1]||null;
  }
  formatStay(cat){
    const native=this.nativeStaySensor(cat);
-   if(!native||!valid(native.state))return '—';
-   const seconds=Math.round(Number(native.state));
+   if(!native)return '—';
+   const factors={s:1,min:60,h:3600};
+   const seconds=Math.round(Number(native.state)*factors[native.attributes.unit_of_measurement]);
    if(!Number.isFinite(seconds)||seconds<0)return '—';
    return Math.floor(seconds/60)+'m '+String(seconds%60).padStart(2,'0')+'s';
  }
