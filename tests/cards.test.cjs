@@ -197,3 +197,14 @@ test('Recent Activity starts and stops its background refresh with card lifecycl
   card.disconnectedCallback();
   assert.equal(card._refreshTimer, null);
 });
+
+test('Recent Activity marks in-flight updates for retry', async () => {
+  const card = new classes['neakasa-activity-card']();
+  const entityId = 'event.neakasa_m1_activity';
+  card.config = { entity: entityId, days: 7, limit: 10, cats: [] };
+  card.draw = () => {};
+  card._loading = true;
+  card._hass = { states: { [entityId]: { attributes: {} } }, callWS: async () => ({}) };
+  await card.loadHistory(entityId);
+  assert.equal(card._queuedEntityId, entityId);
+});
