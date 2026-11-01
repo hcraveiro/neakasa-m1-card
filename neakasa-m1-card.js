@@ -82,7 +82,7 @@ class NeakasaActivityCard extends HTMLElement{
      if(signature!==this._nativeSignature){this._nativeSignature=signature;this.updateRecords(source.state.attributes.events);}
    }else if(source?.mode==='event'){
      const signature=source.id+':'+(source.state.last_changed||'');
-     if(signature!==this._nativeSignature||Date.now()-this._lastRefresh>60000){this._nativeSignature=signature;this.loadHistory(source.id);}
+     if(signature!==this._nativeSignature||Date.now()-this._lastRefresh>15000){this._nativeSignature=signature;this.loadHistory(source.id);}
    }else if(this._nativeSignature!=='unavailable'){this._nativeSignature='unavailable';this.records=null;this.draw();}
  }
  connectedCallback(){
