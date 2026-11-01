@@ -128,7 +128,7 @@ class NeakasaActivityCard extends HTMLElement{
      // Never discard an update that arrived while Recorder was loading.
      const queued=this._queuedEntityId;
      this._queuedEntityId=null;
-     if(queued&&this.activitySource()?.id===queued)Promise.resolve().then(()=>this.loadHistory(queued));
+     if(queued&&this.activitySource()?.id===queued)void this.loadHistory(queued);
    }
  }
  updateRecords(events){
