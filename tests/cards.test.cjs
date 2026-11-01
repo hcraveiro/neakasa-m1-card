@@ -210,7 +210,8 @@ test('Recent Activity queues an event received during an in-flight history reque
   await card.loadHistory(entityId);
   resolveFirst({ [entityId]: [event(1, 'cleaning_completed')] });
   await first;
-  for (let i = 0; i < 10 && calls < 2; i += 1) await Promise.resolve();
+  // VM promises may settle on a later event-loop turn than the host promise.
+  for (let i = 0; i < 10 && calls < 2; i += 1) await new Promise((resolve) => setImmediate(resolve));
   assert.equal(calls, 2);
   assert.equal(card.records.length, 2);
   assert.match(card.records[0].message, /Leveling completed/);
