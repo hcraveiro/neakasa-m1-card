@@ -1,0 +1,38 @@
+name: Publish Neakasa M1 Cards v1.3.0b2 beta
+
+on:
+  push:
+    branches:
+      - beta/v1.3.0b2
+
+permissions:
+  contents: write
+
+jobs:
+  publish-beta:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out beta source
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify JavaScript syntax
+        run: node --check neakasa-m1-card.js
+      - name: Run card compatibility tests
+        run: node --test tests/*.test.cjs
+      - name: Publish GitHub pre-release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view v1.3.0b2 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "GitHub release v1.3.0b2 already exists; skipping."
+            exit 0
+          fi
+          gh release create v1.3.0b2 neakasa-m1-card.js \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "Neakasa M1 Cards v1.3.0b2" \
+            --notes-file .github/RELEASE_NOTES_v1.3.0b2.md \
+            --prerelease
