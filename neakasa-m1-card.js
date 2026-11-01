@@ -430,7 +430,7 @@ class NeakasaCatsCard extends HTMLElement {
    target.append(svg);
  }
  getCardSize(){return 5;}
- static getStubConfig(){return {cats:[{name:'Cleo',image:'/local/neakasa/cleo.jpg',weight:'sensor.cleo_weight',visits:'sensor.cleo_visits_today',stay:'sensor.cats_room_cleo_stay_today',last_visit:'sensor.cleo_last_visit'}]};}
+ static getStubConfig(){return {cats:[{name:'Cleo',image:'/local/neakasa/cleo.jpg',weight:'sensor.cleo_weight',visits:'sensor.cleo_visits_today',stay:'sensor.cats_room_cleo_time_in_box_today',last_visit:'sensor.cleo_last_visit'}]};}
 }
 
 if(!customElements.get('neakasa-m1-card'))customElements.define('neakasa-m1-card',NeakasaM1Card);
