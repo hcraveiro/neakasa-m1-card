@@ -19,6 +19,7 @@ function loadCards() {
     console,
     setInterval,
     clearInterval,
+    URLSearchParams,
   };
   const source = readFileSync(join(__dirname, '..', 'neakasa-m1-card.js'), 'utf8');
   vm.runInNewContext(source, context, { filename: 'neakasa-m1-card.js' });
