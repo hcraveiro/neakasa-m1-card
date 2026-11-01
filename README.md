@@ -29,7 +29,7 @@ The status and indicators open More info. Clean and Level have confirmation by d
 
 ```yaml
 type: custom:neakasa-activity-card
-entity: sensor.cats_room_neakasa_m1_recent_activity
+entity: event.neakasa_m1_activity
 limit: 10
 days: 7
 cats:
@@ -41,7 +41,7 @@ cats:
     image: /local/neakasa/penny.jpg
 ```
 
-The `title` is optional and hidden by default. Cat names and avatar paths are user-configurable; missing avatars fall back to an icon. The timeline reads structured events from the integration's activity sensor, groups entries by day and emphasizes the matched cat name. Events update as soon as the integration publishes new activity.
+The `title` is optional and hidden by default. Cat names and avatar paths are user-configurable; missing avatars fall back to an icon. The timeline reads native Activity event history from Home Assistant Recorder (Neakasa Litterbox v1.6.0+), groups entries by day and emphasizes the matched cat name. The previous recent_activity sensor is supported as a fallback during migration. New events appear after the integration's next cloud poll.
 
 ## Our Cats card
 
@@ -75,19 +75,19 @@ The selection is local to this card instance: no cat is selected on initial load
 
 ## Integration and data sources
 
-All three cards use **native entities** from [Neakasa Litterbox (native history)](https://github.com/hcraveiro/ha-neakasa-litterbox), starting with version **v1.4.4b1** (leveling activity requires **v1.4.4b2**).
+All three cards use **native entities** from [Neakasa Litterbox (native history)](https://github.com/hcraveiro/ha-neakasa-litterbox), with **official v1.6.0+** (legacy fork v1.4.4b1+ is supported during migration).
 
 | Card | Source |
 | --- | --- |
 | `custom:neakasa-m1-card` | Existing litter box integration entities |
 | `custom:neakasa-cats-card` | Cat weight, visits and integration-native `*_stay_today` sensors, measured in seconds |
-| `custom:neakasa-activity-card` | Integration-native `*_recent_activity` sensor with structured `events` attribute |
+| `custom:neakasa-activity-card` | Official `event.*_activity` entity and Recorder history (legacy `*_recent_activity` fallback) |
 
-**Recent Activity:** set `entity: sensor.your_litterbox_recent_activity` (or `activity_entity:`) to your activity sensor. If no entity is specified, the card discovers the first matching native activity sensor automatically. Activity events come directly from the sensor's `events` attribute.
+**Recent Activity:** set `entity: event.your_litterbox_activity` (or `activity_entity:`) to the official Activity event entity. If no entity is specified, the card discovers an Activity event entity automatically. History is retrieved from Recorder using Home Assistant's WebSocket API; the old fork's `sensor.*_recent_activity` is accepted as a migration fallback. Ensure Recorder retains the requested number of days.
 
 **Our Cats:** use `stay: sensor.your_cat_stay_today` or `stay_native: sensor.your_cat_stay_today`. The card formats native seconds as minutes/seconds and can discover a sensor ending in `_<cat_name>_stay_today` if the configured `stay` sensor uses a previous entity ID; it does not read that previous sensor's value.
 
-**Leveling events:** Neakasa Litterbox v1.4.4b2+ records leveling completions observed through MQTT, preserves them across HA restarts and includes them in `events`. Previous leveling events cannot be reconstructed retroactively. The SDK does not reliably distinguish manual from automatic leveling, so the card uses the neutral label **Leveling completed**. Daily durations use the device's cloud records.
+**Leveling events:** Official v1.6.0+ reports completed leveling from cloud activity records, including measured duration. The card does not classify manual versus automatic leveling. On first installation, the integration seeds its activity cursors without replaying previous cloud records; Recorder history accumulates from then onward.
 
 
 ## Installation
