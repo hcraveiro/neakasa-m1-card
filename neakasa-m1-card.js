@@ -72,46 +72,70 @@ class NeakasaM1Card extends HTMLElement{
 }
 class NeakasaActivityCard extends HTMLElement{
  setConfig(config){
-   this.config={title:'',limit:10,days:7,cats:[],...config};this.records=null;this._nativeSignature=null;this.draw();
+   this.config={title:'',limit:10,days:7,cats:[],...config};this.records=null;this._nativeSignature=null;this._lastRefresh=0;this.draw();
  }
  set hass(h){
    this._hass=h;
-   const sensor=this.nativeSensor();
-   const signature=sensor?JSON.stringify(sensor.attributes.events):'unavailable';
-   if(signature!==this._nativeSignature){this._nativeSignature=signature;this.updateRecords(sensor);}
+   const source=this.activitySource();
+   if(source?.mode==='legacy'){
+     const signature=JSON.stringify(source.state.attributes.events);
+     if(signature!==this._nativeSignature){this._nativeSignature=signature;this.updateRecords(source.state.attributes.events);}
+   }else if(source?.mode==='event'){
+     const signature=source.id+':'+(source.state.last_changed||'');
+     if(signature!==this._nativeSignature||Date.now()-this._lastRefresh>60000){this._nativeSignature=signature;this.loadHistory(source.id);}
+   }else if(this._nativeSignature!=='unavailable'){this._nativeSignature='unavailable';this.records=null;this.draw();}
  }
- connectedCallback(){this.updateRecords(this.nativeSensor());}
- nativeSensor(){
-   const states=this._hass?.states||{};
-   const entity=this.config?.activity_entity||this.config?.entity;
-   if(entity&&Array.isArray(states[entity]?.attributes?.events))return states[entity];
-   if(this.config?.activity_entity)return null;
-   return Object.entries(states).find(([id,state])=>id.startsWith('sensor.')&&id.endsWith('_recent_activity')&&Array.isArray(state.attributes?.events))?.[1]||null;
+ connectedCallback(){if(this._hass)this.hass=this._hass;}
+ activitySource(){
+   const states=this._hass?.states||{},configured=this.config?.activity_entity||this.config?.entity;
+   if(configured&&states[configured]){
+     if(configured.startsWith('event.'))return {mode:'event',id:configured,state:states[configured]};
+     if(Array.isArray(states[configured].attributes?.events))return {mode:'legacy',state:states[configured]};
+   }
+   const event=Object.entries(states).find(([id])=>id.startsWith('event.')&&id.endsWith('_activity'));
+   if(event)return {mode:'event',id:event[0],state:event[1]};
+   const legacy=Object.entries(states).find(([id,state])=>id.startsWith('sensor.')&&id.endsWith('_recent_activity')&&Array.isArray(state.attributes?.events));
+   return legacy?{mode:'legacy',state:legacy[1]}:null;
  }
- updateRecords(sensor){
+ async loadHistory(entityId){
+   if(this._loading||!this._hass?.callWS)return;
+   this._loading=true;this._lastRefresh=Date.now();
+   try{
+     const days=Math.max(1,Math.min(30,Number(this.config.days)||7));
+     const response=await this._hass.callWS({type:'history/history_during_period',start_time:new Date(Date.now()-days*86400000).toISOString(),entity_ids:[entityId],minimal_response:false,no_attributes:false,significant_changes_only:false});
+     const series=Array.isArray(response)?response[0]:(response?.[entityId]||[]);
+     const events=(Array.isArray(series)?series:[]).map(item=>item.a||item.attributes||{}).filter(attrs=>['cat_visit','cleaning_completed','leveling_completed'].includes(attrs.event_type)).map(attrs=>({
+       type:attrs.event_type,cat:attrs.cat_name||'Unknown',timestamp:attrs.started_at,completed_at:attrs.ended_at,duration_seconds:attrs.duration_seconds,weight:attrs.weight,weight_unit:attrs.weight_unit,record_id:attrs.record_id
+     }));
+     if(this.activitySource()?.id===entityId){this.updateRecords(events);this._historyError=null;}
+   }catch(error){this._historyError=String(error);console.error('[neakasa-activity-card] History failed',error);this.records=null;this.draw();}
+   finally{this._loading=false;}
+ }
+ updateRecords(events){
    if(!this.config)return;
-   if(!sensor){this.records=null;this.draw();return;}
    const since=Date.now()-Math.max(1,Number(this.config.days)||7)*86400000;
-   const events=sensor.attributes.events;
-   this.records=events.filter(event=>event&&typeof event.timestamp==='string'&&Number.isFinite(Date.parse(event.timestamp))&&Date.parse(event.timestamp)>=since).map(event=>{
+   const seen=new Set();
+   this.records=events.filter(event=>event&&Number.isFinite(Date.parse(event.timestamp||event.completed_at))&&Date.parse(event.completed_at||event.timestamp)>=since).map(event=>{
+     const type=event.type,catName=String(event.cat||'Unknown');
      const duration=Math.max(0,Math.round(Number(event.duration_seconds)||0));
+     const key=event.record_id!=null?type+':'+event.record_id:type+':'+(event.completed_at||event.timestamp);
+     if(seen.has(key))return null;seen.add(key);
      let message;
-     if(event.type==='cat_visit'){
+     if(type==='cat_visit'){
        const stay=duration>=60?Math.floor(duration/60)+'min'+(duration%60?duration%60+'s':''):duration+'s';
-       const weight=Number(event.weight);
-       const weighing=Number.isFinite(weight)&&weight>0?', weighing '+weight+(event.weight_unit||'kg'):'';
-       message=String(event.cat||'Unknown')+' entered, stayed for '+stay+weighing;
-     }else if(event.type==='cleaning')message='Smart Cleanup completed'+(duration>0?' in '+duration+' s':'');
-     else if(event.type==='leveling')message='Manual leveling completed'+(duration>0?' in '+duration+' s':'');
+       const weight=Number(event.weight),weighing=Number.isFinite(weight)&&weight>0?', weighing '+weight+(event.weight_unit||'kg'):'';
+       message=catName+' entered, stayed for '+stay+weighing;
+     }else if(type==='cleaning'||type==='cleaning_completed')message='Smart Cleanup completed'+(duration>0?' in '+duration+' s':'');
+     else if(type==='leveling'||type==='leveling_completed')message='Leveling completed'+(duration>0?' in '+duration+' s':'');
      else message='Litter box activity';
-     return {message,time:event.completed_at||event.timestamp,catName:event.type==='cat_visit'?String(event.cat||'Unknown'):null};
-   }).sort((a,b)=>Date.parse(b.time)-Date.parse(a.time)).slice(0,Math.max(1,Number(this.config.limit)||10));
+     return {message,time:event.completed_at||event.timestamp,catName:type==='cat_visit'?catName:null};
+   }).filter(Boolean).sort((x,y)=>Date.parse(y.time)-Date.parse(x.time)).slice(0,Math.max(1,Number(this.config.limit)||10));
    this.draw();
  }
  draw(){
    if(!this.config)return;
    const card=shell(this);if(this.config.title)card.append(make('div','title',this.config.title));
-   if(!this.records){card.append(make('div','subtitle','Native Neakasa activity sensor unavailable'));return;}
+   if(!this.records){card.append(make('div','subtitle','Neakasa activity history unavailable'));return;}
    if(!this.records.length)card.append(make('div','subtitle','No recent activity'));
    let day='';
    for(const record of this.records){
@@ -131,7 +155,7 @@ class NeakasaActivityCard extends HTMLElement{
    }
  }
  getCardSize(){return 5;}
- static getStubConfig(){return {entity:'sensor.cats_room_neakasa_m1_recent_activity'};}
+ static getStubConfig(){return {entity:'event.neakasa_m1_activity'};}
 }
 
 const CATS_STYLE = `
