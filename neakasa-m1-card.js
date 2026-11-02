@@ -4,6 +4,19 @@ const NEAKASA_ASSETS = {"waste":"data:image/webp;base64,UklGRkQOAABXRUJQVlA4WAoA
 const STYLE = `:host{display:block}ha-card{border-radius:20px;padding:12px;overflow:hidden}.title{text-align:center;font-size:19px;font-weight:600}.subtitle{text-align:center;font-size:14px;color:var(--secondary-text-color)}.device{display:block;width:190px;height:190px;max-width:100%;object-fit:contain;margin:10px auto 12px}.columns{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px}.tile{min-width:0;border:0;background:transparent;color:var(--primary-text-color);text-align:center;padding:8px 2px;cursor:pointer;font:inherit}.tile[disabled]{opacity:.4;cursor:default}.tile img{height:36px;width:36px;object-fit:contain;display:block;margin:0 auto}.tile .asset{height:38px;display:flex;align-items:center;justify-content:center}.tile .asset-fallback{font-size:27px;line-height:1}.tile .value{font-size:17px;font-weight:700}.tile .label{font-size:12px;color:var(--secondary-text-color);margin-top:4px}.action img{height:42px;width:42px;object-fit:contain}.action .label{font-size:14px;color:var(--primary-text-color)}.day{font-size:13px;font-weight:600;color:var(--secondary-text-color);padding:6px 0 12px}.entry{display:grid;grid-template-columns:44px 1fr;gap:10px;padding-bottom:14px;position:relative}.entry:not(:last-child):before{content:'';position:absolute;left:19px;top:42px;bottom:0;border-left:1px dotted var(--divider-color)}.avatar{width:39px;height:39px;border-radius:50%;background:var(--secondary-background-color);display:flex;align-items:center;justify-content:center;overflow:hidden}.avatar img{width:100%;height:100%;object-fit:cover}.time{font-weight:600;font-size:15px}.text{font-size:13px;color:var(--secondary-text-color);margin-top:4px;line-height:1.4;overflow-wrap:anywhere}.text strong{color:var(--primary-text-color)}.overlay{position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,.54);display:flex;align-items:center;justify-content:center;padding:20px}.dialog{width:min(520px,100%);box-sizing:border-box;padding:24px 24px 18px;background:var(--card-background-color,#fff);color:var(--primary-text-color);border-radius:26px;box-shadow:0 12px 32px rgba(0,0,0,.22)}.dialog .title{text-align:left;font-size:22px;font-weight:600}.dialog .prompt{font-size:15px;margin-top:22px;color:var(--primary-text-color)}.dialog .actions{margin-top:32px}.dialog .actions button{background:transparent;border:0;border-radius:24px;padding:10px 18px;color:var(--primary-color);font-weight:600}.dialog .actions button.primary{background:var(--primary-color);color:var(--text-primary-color,#fff)}.dialog select{width:100%;padding:8px;margin-top:12px}.actions{display:flex;justify-content:flex-end;gap:12px;margin-top:18px}.actions button{cursor:pointer;padding:8px 12px}`;
 const make=(tag,cls,txt)=>{const e=document.createElement(tag);if(cls)e.className=cls;if(txt!==undefined)e.textContent=txt;return e;};
 const valid=v=>v!=null&&!['unknown','unavailable',''].includes(String(v).toLowerCase());
+function catPhoto(hass,cat){
+ const states=hass?.states||{};
+ const picture=id=>{const state=states[id];return state&&valid(state.state)?state.attributes?.entity_picture:null;};
+ if(cat?.image_entity)return picture(cat.image_entity)||cat.image||null;
+ const slug=String(cat?.name||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'');
+ if(!slug)return cat?.image||null;
+ const matches=Object.keys(states).filter(id=>id.startsWith('image.')&&(id.slice(6)===slug+'_photo'||id.endsWith('_'+slug+'_photo')));
+ const metric=[cat.weight,cat.visits,cat.stay,cat.stay_native,cat.last_visit].find(id=>typeof id==='string'&&id.includes('_'+slug+'_'));
+ const prefix=metric?.split('.')[1].split('_'+slug+'_')[0];
+ const scoped=prefix&&matches.filter(id=>id==='image.'+prefix+'_'+slug+'_photo');
+ const id=scoped?.length===1?scoped[0]:matches.length===1?matches[0]:null;
+ return (id&&picture(id))||cat.image||null;
+}
 function shell(host){if(!host.shadowRoot)host.attachShadow({mode:'open'});host.shadowRoot.replaceChildren();const css=make('style');css.textContent=STYLE;host.shadowRoot.append(css);const card=make('ha-card');host.shadowRoot.append(card);return card;}
 function photo(parent,source,fallback){const holder=make('span','asset');if(!source){holder.append(make('span','asset-fallback',fallback||'Image unavailable'));parent.append(holder);return;}const img=make('img');img.alt='';img.onerror=()=>{console.error('[neakasa-m1-card] Embedded image failed to load',source.slice(0,55));img.replaceWith(make('span','asset-fallback','Image error'));};img.src=source;holder.append(img);parent.append(holder);}
 class NeakasaM1Card extends HTMLElement{
@@ -74,8 +87,10 @@ class NeakasaActivityCard extends HTMLElement{
  setConfig(config){
    this.config={title:'',limit:10,days:7,cats:[],...config};this.records=null;this._nativeSignature=null;this._lastRefresh=0;this.draw();
  }
- set hass(h){
-   this._hass=h;
+  set hass(h){
+    this._hass=h;
+    const photos=JSON.stringify((this.config?.cats||[]).map(cat=>catPhoto(h,cat)).concat((this.records||[]).map(record=>record.catName&&catPhoto(h,{name:record.catName}))));
+    if(photos!==this._photoSignature){this._photoSignature=photos;if(this.records)this.draw();}
    const source=this.activitySource();
    if(source?.mode==='legacy'){
      const signature=JSON.stringify(source.state.attributes.events);
@@ -163,9 +178,10 @@ class NeakasaActivityCard extends HTMLElement{
      if(current!==day){card.append(make('div','day',current));day=current;}
      const message=record.message.trim();
      const cats=Array.isArray(this.config.cats)?this.config.cats:[];
-     const cat=cats.find(c=>typeof c?.name==='string'&&c.name.length&&(record.catName===c.name||message.toLowerCase().includes(c.name.toLowerCase())));
-     const entry=make('div','entry'),avatar=make('div','avatar');
-     if(cat?.image)photo(avatar,cat.image,'🐱');
+      const cat=cats.find(c=>typeof c?.name==='string'&&c.name.length&&(record.catName===c.name||message.toLowerCase().includes(c.name.toLowerCase())))||(record.catName?{name:record.catName}:null);
+      const entry=make('div','entry'),avatar=make('div','avatar');
+      const image=cat&&catPhoto(this._hass,cat);
+      if(image)photo(avatar,image,'🐱');
      else{const icon=make('ha-icon');icon.setAttribute('icon',cat?'mdi:cat':/clean/i.test(message)?'mdi:broom':/level/i.test(message)?'mdi:spirit-level':'mdi:information-outline');avatar.append(icon);}
      const content=make('div');content.append(make('div','time',time.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})));
      const description=make('div','text'),i=cat?message.toLowerCase().indexOf(cat.name.toLowerCase()):-1;
@@ -257,7 +273,9 @@ class NeakasaCatsCard extends HTMLElement {
      if(!cat)continue;
      el.setAttribute('aria-pressed',String(name===cat.name));
      const visits=el.querySelector('[data-visits]');if(visits)visits.textContent=this.state(cat.visits)?.state??'—';
-     const stay=el.querySelector('[data-stay]');if(stay)stay.textContent=this.formatStay(cat);
+      const stay=el.querySelector('[data-stay]');if(stay)stay.textContent=this.formatStay(cat);
+      const avatar=el.querySelector('[data-cat-avatar]');
+      if(avatar){const image=catPhoto(this._hass,cat);if(avatar.dataset.source!==(image||'')){avatar.dataset.source=image||'';if(image){const img=make('img');img.src=image;img.alt=cat.name;img.onerror=()=>avatar.replaceChildren(make('span',null,'🐱'));avatar.replaceChildren(img);}else avatar.replaceChildren(make('span',null,'🐱'));}}
    }
    if(name!==this._renderedCat){this._renderedCat=name;this.renderPanel();}
    else{
@@ -275,8 +293,7 @@ class NeakasaCatsCard extends HTMLElement {
      const button=make('button','cat-choice');button.type='button';button.dataset.catName=cat.name;
      button.setAttribute('aria-label',cat.name);button.setAttribute('aria-pressed','false');
      const ident=make('div','cat-ident');
-     if(cat.image){const img=make('img');img.src=cat.image;img.alt=cat.name;ident.append(img);}
-     else ident.append(make('span',null,'🐱'));
+      const avatar=make('span');avatar.dataset.catAvatar='';ident.append(avatar);
      ident.append(make('span',null,cat.name));
      const details=make('div','cat-details');
      const visits=make('div','detail');visits.append(make('span','poop-icon','💩'));const visitsValue=make('span',null,'—');visitsValue.dataset.visits='';visits.append(visitsValue);
@@ -446,7 +463,7 @@ class NeakasaCatsCard extends HTMLElement {
    target.append(svg);
  }
  getCardSize(){return 5;}
- static getStubConfig(){return {cats:[{name:'Cleo',image:'/local/neakasa/cleo.jpg',weight:'sensor.cleo_weight',visits:'sensor.cleo_visits_today',stay:'sensor.cats_room_cleo_time_in_box_today',last_visit:'sensor.cleo_last_visit'}]};}
+ static getStubConfig(){return {cats:[{name:'Cleo',weight:'sensor.cleo_weight',visits:'sensor.cleo_visits_today',stay:'sensor.cats_room_cleo_time_in_box_today',last_visit:'sensor.cleo_last_visit'}]};}
 }
 
 if(!customElements.get('neakasa-m1-card'))customElements.define('neakasa-m1-card',NeakasaM1Card);

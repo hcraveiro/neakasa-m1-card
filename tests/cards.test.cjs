@@ -23,10 +23,23 @@ function loadCards() {
   };
   const source = readFileSync(join(__dirname, '..', 'neakasa-m1-card.js'), 'utf8');
   vm.runInNewContext(source, context, { filename: 'neakasa-m1-card.js' });
+  registry.set('catPhoto', context.catPhoto);
   return Object.fromEntries(registry);
 }
 
 const classes = loadCards();
+
+test('cat photos are discovered, scoped, and retain URL fallback', () => {
+  const photo = (url, state = '2026-01-01') => ({ state, attributes: { entity_picture: url } });
+  const hass = { states: { 'image.cats_room_cleo_photo': photo('/proxy/cleo') } };
+  assert.equal(classes.catPhoto(hass, { name: 'Cleo', image: '/local/old.jpg' }), '/proxy/cleo');
+  hass.states['image.other_cleo_photo'] = photo('/proxy/other');
+  assert.equal(classes.catPhoto(hass, { name: 'Cleo', image: '/local/old.jpg' }), '/local/old.jpg');
+  assert.equal(classes.catPhoto(hass, { name: 'Cleo', stay: 'sensor.cats_room_cleo_time_in_box_today' }), '/proxy/cleo');
+  assert.equal(classes.catPhoto(hass, { name: 'Cleo', image_entity: 'image.other_cleo_photo' }), '/proxy/other');
+  hass.states['image.other_cleo_photo'].state = 'unavailable';
+  assert.equal(classes.catPhoto(hass, { name: 'Cleo', image_entity: 'image.other_cleo_photo', image: '/local/old.jpg' }), '/local/old.jpg');
+});
 
 function sensor(state, unit) {
   return { state: String(state), attributes: { unit_of_measurement: unit } };

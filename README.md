@@ -32,16 +32,9 @@ type: custom:neakasa-activity-card
 entity: event.neakasa_m1_activity
 limit: 10
 days: 7
-cats:
-  - name: Cleo
-    image: /local/neakasa/cleo.jpg
-  - name: Neffy
-    image: /local/neakasa/neffy.jpg
-  - name: Penny
-    image: /local/neakasa/penny.jpg
 ```
 
-The `title` is optional and hidden by default. Cat names and avatar paths are user-configurable; missing avatars fall back to an icon. The timeline reads native Activity event history from Home Assistant Recorder (Neakasa Litterbox v1.6.0+), groups entries by day and emphasizes the matched cat name. The previous recent_activity sensor is supported as a fallback during migration; if a matching official event entity is available, the card prefers it even if the legacy sensor is still configured. New events appear after the integration's next cloud poll.
+The `title` is optional and hidden by default. Cat photos are discovered from their names in visit events; missing avatars fall back to an icon. The timeline reads native Activity event history from Home Assistant Recorder (Neakasa Litterbox v1.6.0+), groups entries by day and emphasizes the matched cat name. The previous recent_activity sensor is supported as a fallback during migration; if a matching official event entity is available, the card prefers it even if the legacy sensor is still configured. New events appear after the integration's next cloud poll.
 
 ## Our Cats card
 
@@ -52,26 +45,25 @@ type: custom:neakasa-cats-card
 days: 7
 cats:
   - name: Cleo
-    image: /local/neakasa/cleo.jpg
     weight: sensor.cleo_weight
     visits: sensor.cleo_visits_today
     stay: sensor.cats_room_cleo_time_in_box_today
     last_visit: sensor.cleo_last_visit
   - name: Neffy
-    image: /local/neakasa/neffy.jpg
     weight: sensor.neffy_weight
     visits: sensor.neffy_visits_today
     stay: sensor.cats_room_neffy_time_in_box_today
     last_visit: sensor.neffy_last_visit
   - name: Penny
-    image: /local/neakasa/penny.jpg
     weight: sensor.penny_weight
     visits: sensor.penny_visits_today
     stay: sensor.cats_room_penny_time_in_box_today
     last_visit: sensor.penny_last_visit
 ```
 
-The selection is local to this card instance: no cat is selected on initial load, and tapping a selected cat deselects it. No helper is required. The selection resets after reloading the dashboard. The selected cat's detail panel includes a tappable Last visit row and touch or mouse swipes (or the dots) to switch between Weight and Daily visits charts. Cat photos remain local user-configurable assets.
+The selection is local to this card instance: no cat is selected on initial load, and tapping a selected cat deselects it. No helper is required. The selection resets after reloading the dashboard. The selected cat's detail panel includes a tappable Last visit row and touch or mouse swipes (or the dots) to switch between Weight and Daily visits charts.
+
+Both cards automatically find a unique `image.*_<cat_name>_photo` entity, for example `image.cats_room_cleo_photo`, and use its Home Assistant `entity_picture`. No upload to `www` is needed. When multiple matching entities exist, the Our Cats card uses the prefix of a configured cat sensor to disambiguate when possible; otherwise specify `image_entity: image.cats_room_cleo_photo` for that cat in either card's `cats` list. An existing `image:` URL remains a fallback when the entity is unavailable or cannot be identified. Photos update when Home Assistant updates the entity.
 
 ## Integration and data sources
 
@@ -109,4 +101,4 @@ MIT.
 
 ## Versioning
 
-Version 1.2.2 adds mouse-drag navigation to the Our Cats carousel and its Weight/Daily visits charts, retaining touch swipe and dot navigation. The original six icons and device photo are embedded in the JavaScript; cat avatar images remain user-configurable.
+Version 1.4.0 automatically discovers cat photo entities in the Our Cats and Recent Activity cards, while preserving manually configured image URLs as a fallback. See the [release notes](.github/RELEASE_NOTES_v1.4.0.md) for details.
