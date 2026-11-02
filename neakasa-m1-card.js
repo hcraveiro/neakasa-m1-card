@@ -7,15 +7,16 @@ const valid=v=>v!=null&&!['unknown','unavailable',''].includes(String(v).toLower
 function catPhoto(hass,cat){
  const states=hass?.states||{};
  const picture=id=>{const state=states[id];return state&&valid(state.state)?state.attributes?.entity_picture:null;};
- if(cat?.image_entity)return picture(cat.image_entity)||cat.image||null;
+ if(cat?.image)return cat.image;
+ if(cat?.image_entity)return picture(cat.image_entity)||null;
  const slug=String(cat?.name||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'');
- if(!slug)return cat?.image||null;
+ if(!slug)return null;
  const matches=Object.keys(states).filter(id=>id.startsWith('image.')&&(id.slice(6)===slug+'_photo'||id.endsWith('_'+slug+'_photo')));
  const metric=[cat.weight,cat.visits,cat.stay,cat.stay_native,cat.last_visit].find(id=>typeof id==='string'&&id.includes('_'+slug+'_'));
  const prefix=metric?.split('.')[1].split('_'+slug+'_')[0];
  const scoped=prefix&&matches.filter(id=>id==='image.'+prefix+'_'+slug+'_photo');
  const id=scoped?.length===1?scoped[0]:matches.length===1?matches[0]:null;
- return (id&&picture(id))||cat.image||null;
+ return (id&&picture(id))||null;
 }
 function shell(host){if(!host.shadowRoot)host.attachShadow({mode:'open'});host.shadowRoot.replaceChildren();const css=make('style');css.textContent=STYLE;host.shadowRoot.append(css);const card=make('ha-card');host.shadowRoot.append(card);return card;}
 function photo(parent,source,fallback){const holder=make('span','asset');if(!source){holder.append(make('span','asset-fallback',fallback||'Image unavailable'));parent.append(holder);return;}const img=make('img');img.alt='';img.onerror=()=>{console.error('[neakasa-m1-card] Embedded image failed to load',source.slice(0,55));img.replaceWith(make('span','asset-fallback','Image error'));};img.src=source;holder.append(img);parent.append(holder);}

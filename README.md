@@ -63,7 +63,7 @@ cats:
 
 The selection is local to this card instance: no cat is selected on initial load, and tapping a selected cat deselects it. No helper is required. The selection resets after reloading the dashboard. The selected cat's detail panel includes a tappable Last visit row and touch or mouse swipes (or the dots) to switch between Weight and Daily visits charts.
 
-Both cards automatically find a unique `image.*_<cat_name>_photo` entity, for example `image.cats_room_cleo_photo`, and use its Home Assistant `entity_picture`. No upload to `www` is needed. When multiple matching entities exist, the Our Cats card uses the prefix of a configured cat sensor to disambiguate when possible; otherwise specify `image_entity: image.cats_room_cleo_photo` for that cat in either card's `cats` list. An existing `image:` URL remains a fallback when the entity is unavailable or cannot be identified. Photos update when Home Assistant updates the entity.
+Both cards automatically find a unique `image.*_<cat_name>_photo` entity, for example `image.cats_room_cleo_photo`, and use its Home Assistant `entity_picture`. No upload to `www` is needed. When multiple matching entities exist, the Our Cats card uses the prefix of a configured cat sensor to disambiguate when possible; otherwise specify `image_entity: image.cats_room_cleo_photo` for that cat in either card's `cats` list. An `image:` URL takes priority over both automatic discovery and `image_entity:`; for example, set `image: /local/neakasa/cleo.jpg` to use a file in `www/neakasa/cleo.jpg`. Remove `image:` to use an entity instead. Entity photos update when Home Assistant updates the entity.
 
 ## Integration and data sources
 
@@ -101,4 +101,4 @@ MIT.
 
 ## Versioning
 
-Version 1.4.0 automatically discovers cat photo entities in the Our Cats and Recent Activity cards, while preserving manually configured image URLs as a fallback. See the [release notes](.github/RELEASE_NOTES_v1.4.0.md) for details.
+Version 1.4.1 gives explicitly configured image URLs priority over automatically discovered cat photos. See the [release notes](.github/RELEASE_NOTES_v1.4.1.md) for details.
